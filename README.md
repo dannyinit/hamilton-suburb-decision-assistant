@@ -36,6 +36,20 @@ data (parsed as a real date, not string-compared) — currently **2026-Q1**. Thi
 recomputed on every run, so it moves forward automatically as MBIE publishes new
 quarters; it is never hardcoded.
 
+All tables below are created with explicit `CREATE TABLE` DDL (primary keys and
+`FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)` constraints are real schema
+constraints, verifiable with `sqlite3 hamilton.db .schema`, not just conventions
+documented in the ER diagram). The build script itself runs with
+`PRAGMA foreign_keys = ON`, so if the ETL ever produces a `sa2_code` that isn't in
+`suburbs`, the build fails immediately with `FOREIGN KEY constraint failed` instead
+of silently writing orphaned rows.
+
+**SQLite does not enforce foreign keys by default — this is a per-connection
+setting, not a property of the database file.** Anyone who later opens
+`hamilton.db` with a new connection (including the Node.js/Express backend) must
+run `PRAGMA foreign_keys = ON` on that connection themselves, or the constraints
+declared in the schema will silently not be checked.
+
 ### `suburbs` (62 rows, dimension)
 | column | type | notes |
 |---|---|---|

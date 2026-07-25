@@ -182,6 +182,60 @@ def compute_bus_stops_within_radius(
     return pd.DataFrame(counts, columns=["sa2_code", "bus_stop_count_500m"])
 
 
+# Explicit DDL (rather than letting pandas' to_sql() infer CREATE TABLE from dtypes) so that
+# primary keys and foreign keys are real, enforced schema constraints - not just documentation
+# in the ER diagram. Tables are listed parent-first: suburbs must exist and be populated before
+# any dependent table is inserted into, since FOREIGN KEY checks are immediate (not deferred).
+SCHEMA_DDL = """
+CREATE TABLE suburbs (
+    sa2_code INTEGER PRIMARY KEY,
+    sa2_name TEXT NOT NULL,
+    easting REAL,
+    northing REAL,
+    latitude REAL,
+    longitude REAL
+);
+
+CREATE TABLE rent (
+    sa2_code INTEGER NOT NULL,
+    dwelling_type TEXT NOT NULL,
+    number_of_beds TEXT,
+    timeframe TEXT NOT NULL,
+    quarters_stale INTEGER NOT NULL,
+    median_rent REAL,
+    geometric_mean_rent REAL,
+    upper_quartile_rent REAL,
+    lower_quartile_rent REAL,
+    total_bonds INTEGER,
+    active_bonds INTEGER,
+    PRIMARY KEY (sa2_code, dwelling_type, number_of_beds),
+    FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)
+);
+
+CREATE TABLE bus_stops (
+    stop_id INTEGER PRIMARY KEY,
+    stop_name TEXT,
+    easting REAL,
+    northing REAL
+);
+
+CREATE TABLE suburb_bus_access (
+    sa2_code INTEGER PRIMARY KEY,
+    bus_stop_count_500m INTEGER NOT NULL,
+    FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)
+);
+
+CREATE TABLE suburb_data_status (
+    sa2_code INTEGER PRIMARY KEY,
+    has_rent_data INTEGER NOT NULL,
+    all_all_timeframe TEXT,
+    all_all_quarters_stale INTEGER,
+    data_status TEXT NOT NULL,
+    FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)
+);
+"""
+
+
 def build_database(
     suburbs: pd.DataFrame,
     rent: pd.DataFrame,
@@ -195,23 +249,18 @@ def build_database(
         db_path.unlink()
 
     with sqlite3.connect(db_path) as conn:
-        suburbs.to_sql("suburbs", conn, index=False)
-        rent.to_sql("rent", conn, index=False)
-        bus_stops.to_sql("bus_stops", conn, index=False)
-        bus_access.to_sql("suburb_bus_access", conn, index=False)
-        data_status.to_sql("suburb_data_status", conn, index=False)
+        # Must be set per-connection (SQLite does not enforce FKs by default) and BEFORE any
+        # inserts, so a bug in the ETL that produces an orphaned sa2_code fails the build loudly
+        # instead of silently writing bad data.
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(SCHEMA_DDL)
 
-        conn.execute("CREATE UNIQUE INDEX idx_suburbs_pk ON suburbs (sa2_code)")
-        conn.execute(
-            "CREATE UNIQUE INDEX idx_rent_pk ON rent (sa2_code, dwelling_type, number_of_beds)"
-        )
-        conn.execute("CREATE UNIQUE INDEX idx_bus_stops_pk ON bus_stops (stop_id)")
-        conn.execute(
-            "CREATE UNIQUE INDEX idx_bus_access_pk ON suburb_bus_access (sa2_code)"
-        )
-        conn.execute(
-            "CREATE UNIQUE INDEX idx_data_status_pk ON suburb_data_status (sa2_code)"
-        )
+        suburbs.to_sql("suburbs", conn, index=False, if_exists="append")
+        rent.to_sql("rent", conn, index=False, if_exists="append")
+        bus_stops.to_sql("bus_stops", conn, index=False, if_exists="append")
+        bus_access.to_sql("suburb_bus_access", conn, index=False, if_exists="append")
+        data_status.to_sql("suburb_data_status", conn, index=False, if_exists="append")
+
         conn.commit()
 
 
