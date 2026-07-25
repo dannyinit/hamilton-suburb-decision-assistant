@@ -1,0 +1,14 @@
+# Python
+data-pipeline/venv/
+__pycache__/
+*.pyc
+
+# Database output
+data-pipeline/output/*.db*
+
+.DS_Store
+
+# Node.js
+node_modules/
+
+.env
