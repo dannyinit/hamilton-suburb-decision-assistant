@@ -102,6 +102,14 @@ behind), all other 60 suburbs = `CURRENT`.
   results; Feature 2 is a transparency/lookup tool where the user is inspecting one specific number,
   so any staleness at all should be disclosed.
 
+## Entity-relationship diagram
+
+See [`data-pipeline/docs/er-diagram.puml`](data-pipeline/docs/er-diagram.puml) (PlantUML; open with
+the PlantUML VS Code extension, Alt+D to preview). It covers all 5 tables above and notes how the
+one potential many-to-many relationship in this schema — a bus stop can lie within 500m of more
+than one suburb centroid, and a suburb has many stops nearby — is resolved: it's never materialised
+as a bridge table, only as the precomputed 1:1 fact `SUBURB_BUS_ACCESS.bus_stop_count_500m`.
+
 ## Setup
 
 1. Create a virtual environment: `python3 -m venv venv`

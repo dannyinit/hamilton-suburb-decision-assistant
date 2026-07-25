@@ -1,0 +1,71 @@
+@startuml hamilton_db_er
+
+' ER diagram for data-pipeline/output/hamilton.db
+' Preview in VS Code with the PlantUML extension (Alt+D, or right-click > Preview Current Diagram)
+
+hide circle
+skinparam linetype ortho
+
+entity "SUBURBS" as suburbs {
+  * sa2_code : INTEGER <<PK>>
+  --
+  sa2_name : TEXT
+  easting : REAL
+  northing : REAL
+  latitude : REAL
+  longitude : REAL
+}
+
+entity "RENT" as rent {
+  * sa2_code : INTEGER <<PK, FK>>
+  * dwelling_type : TEXT <<PK>>
+  * number_of_beds : TEXT <<PK>>
+  --
+  timeframe : TEXT
+  quarters_stale : INTEGER
+  median_rent : REAL
+  geometric_mean_rent : REAL
+  upper_quartile_rent : REAL
+  lower_quartile_rent : REAL
+  total_bonds : INTEGER
+  active_bonds : INTEGER
+}
+
+entity "SUBURB_BUS_ACCESS" as suburb_bus_access {
+  * sa2_code : INTEGER <<PK, FK>>
+  --
+  bus_stop_count_500m : INTEGER
+}
+
+entity "SUBURB_DATA_STATUS" as suburb_data_status {
+  * sa2_code : INTEGER <<PK, FK>>
+  --
+  has_rent_data : BOOLEAN
+  all_all_timeframe : TEXT
+  all_all_quarters_stale : INTEGER
+  data_status : TEXT
+}
+
+entity "BUS_STOPS" as bus_stops {
+  * stop_id : INTEGER <<PK>>
+  --
+  stop_name : TEXT
+  easting : REAL
+  northing : REAL
+}
+
+suburbs ||--o{ rent : "has rent\nrecords for"
+suburbs ||--|| suburb_bus_access : "has bus access\nsummary for"
+suburbs ||--|| suburb_data_status : "has data\nstatus for"
+
+note right of bus_stops
+  No FK to SUBURBS.
+  Geographically, "which suburbs is a stop within
+  500m of" is many-to-many (a stop can be near more
+  than one suburb centroid; a suburb has many stops
+  nearby). That raw M:N is never materialised as a
+  bridge table -- the ETL step resolves it into the
+  1:1 fact SUBURB_BUS_ACCESS.bus_stop_count_500m.
+end note
+
+@enduml
