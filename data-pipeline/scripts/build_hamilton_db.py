@@ -23,6 +23,15 @@ DB_PATH = OUTPUT_DIR / "hamilton.db"
 BUS_STOP_RADIUS_M = 500
 STALE_THRESHOLD_QUARTERS = 4
 
+# Fixed list of destinations users can pick, per the project proposal's functional requirements.
+# Coordinates are NZTM2000 (EPSG:2193), converted from Google Maps lat/long via pyproj.
+DESTINATIONS = [
+    {"destination_id": 1, "name": "University of Waikato", "easting": 1804138.45, "northing": 5815339.29},
+    {"destination_id": 2, "name": "Transport Centre", "easting": 1800605.24, "northing": 5815480.44},
+    {"destination_id": 3, "name": "The Base", "easting": 1796769.94, "northing": 5819683.52},
+    {"destination_id": 4, "name": "Waikato Hospital", "easting": 1800986.74, "northing": 5813359.96},
+]
+
 
 def load_hamilton_sa2_codes(higher_geo_path: Path) -> pd.DataFrame:
     """Return the 62 SA2 codes/names belonging to Hamilton City (by TA, not by name)."""
@@ -182,6 +191,31 @@ def compute_bus_stops_within_radius(
     return pd.DataFrame(counts, columns=["sa2_code", "bus_stop_count_500m"])
 
 
+def load_destinations() -> pd.DataFrame:
+    """Fixed list of the 4 destinations users can pick (see DESTINATIONS above)."""
+    return pd.DataFrame(DESTINATIONS)
+
+
+def compute_suburb_destination_distances(
+    suburbs: pd.DataFrame, destinations: pd.DataFrame
+) -> pd.DataFrame:
+    """Euclidean NZTM distance (metres) from each suburb centroid to each fixed destination."""
+    rows = []
+    for _, suburb in suburbs.iterrows():
+        dx = destinations["easting"] - suburb["easting"]
+        dy = destinations["northing"] - suburb["northing"]
+        distance_m = (dx**2 + dy**2) ** 0.5
+        rows.extend(
+            zip(
+                [suburb["sa2_code"]] * len(destinations),
+                destinations["destination_id"],
+                distance_m,
+            )
+        )
+
+    return pd.DataFrame(rows, columns=["sa2_code", "destination_id", "distance_m"])
+
+
 # Explicit DDL (rather than letting pandas' to_sql() infer CREATE TABLE from dtypes) so that
 # primary keys and foreign keys are real, enforced schema constraints - not just documentation
 # in the ER diagram. Tables are listed parent-first: suburbs must exist and be populated before
@@ -233,6 +267,26 @@ CREATE TABLE suburb_data_status (
     data_status TEXT NOT NULL,
     FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)
 );
+
+CREATE TABLE destinations (
+    destination_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    easting REAL NOT NULL,
+    northing REAL NOT NULL
+);
+
+-- Junction table resolving the many-to-many relationship between suburbs and destinations
+-- (each suburb has a distance to every destination; each destination has a distance from every
+-- suburb) with a real bridge table, since the per-pair distance value itself is needed downstream
+-- -- unlike bus_stops/suburbs, this can't be collapsed into a precomputed aggregate.
+CREATE TABLE suburb_destination_distance (
+    sa2_code INTEGER NOT NULL,
+    destination_id INTEGER NOT NULL,
+    distance_m REAL NOT NULL,
+    PRIMARY KEY (sa2_code, destination_id),
+    FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code),
+    FOREIGN KEY (destination_id) REFERENCES destinations (destination_id)
+);
 """
 
 
@@ -242,6 +296,8 @@ def build_database(
     bus_stops: pd.DataFrame,
     bus_access: pd.DataFrame,
     data_status: pd.DataFrame,
+    destinations: pd.DataFrame,
+    destination_distances: pd.DataFrame,
     db_path: Path,
 ) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -260,6 +316,10 @@ def build_database(
         bus_stops.to_sql("bus_stops", conn, index=False, if_exists="append")
         bus_access.to_sql("suburb_bus_access", conn, index=False, if_exists="append")
         data_status.to_sql("suburb_data_status", conn, index=False, if_exists="append")
+        destinations.to_sql("destinations", conn, index=False, if_exists="append")
+        destination_distances.to_sql(
+            "suburb_destination_distance", conn, index=False, if_exists="append"
+        )
 
         conn.commit()
 
@@ -273,8 +333,12 @@ def main() -> None:
     bus_stops = load_bus_stops(RAW_DIR / "bus_stops_hamilton.csv")
     bus_access = compute_bus_stops_within_radius(suburbs, bus_stops)
     data_status = build_suburb_data_status(rent, hamilton_sa2)
+    destinations = load_destinations()
+    destination_distances = compute_suburb_destination_distances(suburbs, destinations)
 
-    build_database(suburbs, rent, bus_stops, bus_access, data_status, DB_PATH)
+    build_database(
+        suburbs, rent, bus_stops, bus_access, data_status, destinations, destination_distances, DB_PATH
+    )
 
     print(f"Done. Wrote {DB_PATH}")
     print(f"  suburbs: {len(suburbs)} rows")
@@ -282,6 +346,8 @@ def main() -> None:
     print(f"  bus_stops: {len(bus_stops)} rows")
     print(f"  suburb_bus_access: {len(bus_access)} rows")
     print(f"  suburb_data_status: {len(data_status)} rows")
+    print(f"  destinations: {len(destinations)} rows")
+    print(f"  suburb_destination_distance: {len(destination_distances)} rows")
 
 
 if __name__ == "__main__":

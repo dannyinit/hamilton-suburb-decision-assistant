@@ -101,6 +101,30 @@ As of the current data pull: **Te Rapa North** = `NO_DATA` (zero rows in `mbie_r
 for this SA2, in any dwelling type or bed count), **Te Rapa South** = `STALE` (7 quarters
 behind), all other 60 suburbs = `CURRENT`.
 
+### `destinations` (4 rows, fixed reference data)
+The 4 destinations users can pick, per the project proposal's functional requirements. Not
+derived from any CSV — hardcoded as the `DESTINATIONS` constant in `build_hamilton_db.py`.
+Coordinates are NZTM2000 (EPSG:2193), converted from Google Maps lat/long via pyproj.
+
+| column | type | notes |
+|---|---|---|
+| destination_id | INTEGER PK | |
+| name | TEXT, unique | University of Waikato / Transport Centre / The Base / Waikato Hospital |
+| easting, northing | REAL | NZTM2000 |
+
+### `suburb_destination_distance` (248 rows = 62 suburbs × 4 destinations, junction)
+Euclidean NZTM distance from each suburb's centroid to each destination. This is a genuine
+many-to-many relationship resolved with a real bridge table (composite PK, two FKs) — unlike
+`bus_stops`/`suburbs`, the per-pair `distance_m` is itself needed downstream (the scoring
+algorithm looks up the distance for the one destination the user picked), so it can't be
+collapsed into a precomputed aggregate.
+
+| column | type | notes |
+|---|---|---|
+| sa2_code | INTEGER PK FK→suburbs | |
+| destination_id | INTEGER PK FK→destinations | |
+| distance_m | REAL | straight-line NZTM distance, metres |
+
 ### Consumption rules for downstream features (not yet implemented)
 
 - **Feature 1 — Suburb Finder (ranking):** exclude a suburb when `suburb_data_status.data_status != 'CURRENT'`,
@@ -119,10 +143,14 @@ behind), all other 60 suburbs = `CURRENT`.
 ## Entity-relationship diagram
 
 See [`data-pipeline/docs/er-diagram.puml`](data-pipeline/docs/er-diagram.puml) (PlantUML; open with
-the PlantUML VS Code extension, Alt+D to preview). It covers all 5 tables above and notes how the
-one potential many-to-many relationship in this schema — a bus stop can lie within 500m of more
-than one suburb centroid, and a suburb has many stops nearby — is resolved: it's never materialised
-as a bridge table, only as the precomputed 1:1 fact `SUBURB_BUS_ACCESS.bus_stop_count_500m`.
+the PlantUML VS Code extension, Alt+D to preview). It covers all 7 tables above and both
+many-to-many relationships in this schema, resolved two different ways:
+- `bus_stops` ↔ `suburbs` (a stop can lie within 500m of more than one suburb centroid, and a
+  suburb has many stops nearby): never materialised as a bridge table — collapsed at ETL time
+  into the precomputed 1:1 fact `suburb_bus_access.bus_stop_count_500m`.
+- `suburbs` ↔ `destinations` (every suburb has a distance to every destination, and vice versa):
+  resolved with a genuine junction table, `suburb_destination_distance`, since the per-pair
+  distance value itself is needed downstream and can't be aggregated away.
 
 ## Setup
 

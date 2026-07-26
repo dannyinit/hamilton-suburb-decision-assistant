@@ -54,9 +54,26 @@ entity "BUS_STOPS" as bus_stops {
   northing : REAL
 }
 
+entity "DESTINATIONS" as destinations {
+  * destination_id : INTEGER <<PK>>
+  --
+  name : TEXT
+  easting : REAL
+  northing : REAL
+}
+
+entity "SUBURB_DESTINATION_DISTANCE" as suburb_destination_distance {
+  * sa2_code : INTEGER <<PK, FK>>
+  * destination_id : INTEGER <<PK, FK>>
+  --
+  distance_m : REAL
+}
+
 suburbs ||--o{ rent : "has rent\nrecords for"
 suburbs ||--|| suburb_bus_access : "has bus access\nsummary for"
 suburbs ||--|| suburb_data_status : "has data\nstatus for"
+suburbs ||--o{ suburb_destination_distance : "has distance\nrecords for"
+destinations ||--o{ suburb_destination_distance : "is target of\ndistance for"
 
 note right of bus_stops
   No FK to SUBURBS.
@@ -66,6 +83,17 @@ note right of bus_stops
   nearby). That raw M:N is never materialised as a
   bridge table -- the ETL step resolves it into the
   1:1 fact SUBURB_BUS_ACCESS.bus_stop_count_500m.
+end note
+
+note bottom of suburb_destination_distance
+  This IS a real junction table: SUBURBS <-> DESTINATIONS
+  is genuinely many-to-many (each suburb has a distance to
+  every destination; each destination has one from every
+  suburb), and unlike BUS_STOPS, the per-pair distance_m
+  value itself is needed downstream -- it can't be
+  collapsed into a precomputed aggregate like
+  SUBURB_BUS_ACCESS was, so the M:N is resolved here with
+  a proper bridge table (composite PK, two FKs) instead.
 end note
 
 @enduml
