@@ -1,7 +1,8 @@
 const express = require('express');
+const rentalPriceCheck = require('./rentalPriceCheck');
 
 const router = express.Router();
 
-// Feature endpoints (e.g. Rental Price Check) are mounted here in later steps.
+router.use(rentalPriceCheck);
 
 module.exports = router;
