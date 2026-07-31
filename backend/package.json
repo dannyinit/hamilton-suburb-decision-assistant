@@ -1,0 +1,15 @@
+{
+  "name": "hamilton-suburb-decision-assistant-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express API backend for the Hamilton Suburb Decision Assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2"
+  }
+}
