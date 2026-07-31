@@ -5,9 +5,18 @@ const router = express.Router();
 
 const VALID_DWELLING_TYPES = ['ALL', 'Apartment', 'Boarding House', 'Flat', 'House', 'Room'];
 
+// Feature 2 (lookup/transparency) discloses any staleness at all, unlike
+// Feature 1's ranking engine which only excludes a suburb at >= 4 quarters
+// stale (see data-pipeline/README.md, "Consumption rules for downstream
+// features").
+const STALE_THRESHOLD_QUARTERS = 1;
+
 const findSuburbStmt = db.prepare('SELECT sa2_code, sa2_name FROM suburbs WHERE sa2_code = ?');
 const findRentStmt = db.prepare(
   'SELECT * FROM rent WHERE sa2_code = ? AND dwelling_type = ? AND number_of_beds = ?'
+);
+const findAllAllRentStmt = db.prepare(
+  "SELECT * FROM rent WHERE sa2_code = ? AND dwelling_type = 'ALL' AND number_of_beds = 'ALL'"
 );
 
 function comparisonLabel(rent, lowerQuartile, upperQuartile) {
@@ -15,6 +24,12 @@ function comparisonLabel(rent, lowerQuartile, upperQuartile) {
   if (rent < lowerQuartile) return 'Below market';
   if (rent > upperQuartile) return 'Above market';
   return 'Fair';
+}
+
+function stalenessWarning(row) {
+  if (row.quarters_stale < STALE_THRESHOLD_QUARTERS) return null;
+  const quarterWord = row.quarters_stale === 1 ? 'quarter' : 'quarters';
+  return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
 }
 
 router.get('/rental-price-check', (req, res) => {
@@ -55,13 +70,22 @@ router.get('/rental-price-check', (req, res) => {
     return res.status(404).json({ error: `Unknown sa2_code: ${sa2Code}` });
   }
 
-  const row = findRentStmt.get(sa2Code, dwellingType, numberOfBeds);
+  let row = findRentStmt.get(sa2Code, dwellingType, numberOfBeds);
+  let fallback = false;
 
   if (!row) {
-    // TODO (step 3): fall back to dwelling_type=ALL/number_of_beds=ALL, and
-    // return a clear "insufficient data" response if even that is missing.
-    return res.status(501).json({
-      error: 'No exact match for that combination — fallback logic not implemented yet',
+    row = findAllAllRentStmt.get(sa2Code);
+    fallback = row != null;
+  }
+
+  if (!row) {
+    return res.json({
+      sa2_code: suburb.sa2_code,
+      sa2_name: suburb.sa2_name,
+      dwelling_type: dwellingType,
+      number_of_beds: numberOfBeds,
+      insufficient_data: true,
+      message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bed counts.`,
     });
   }
 
@@ -72,15 +96,20 @@ router.get('/rental-price-check', (req, res) => {
   res.json({
     sa2_code: suburb.sa2_code,
     sa2_name: suburb.sa2_name,
+    requested_dwelling_type: dwellingType,
+    requested_number_of_beds: numberOfBeds,
     dwelling_type: row.dwelling_type,
     number_of_beds: row.number_of_beds,
     median_rent: row.median_rent,
     lower_quartile_rent: row.lower_quartile_rent,
     upper_quartile_rent: row.upper_quartile_rent,
-    fallback: false,
-    // TODO (step 3): staleness warning derived from row.quarters_stale.
-    quarters_stale: row.quarters_stale,
+    fallback,
+    ...(fallback && {
+      fallback_note: 'No data for the exact dwelling type/bed count combination — showing a broader estimate across all dwelling types and bed counts for this suburb.',
+    }),
     timeframe: row.timeframe,
+    quarters_stale: row.quarters_stale,
+    staleness_warning: stalenessWarning(row),
     ...(rent !== null ? { rent, comparison } : {}),
   });
 });
