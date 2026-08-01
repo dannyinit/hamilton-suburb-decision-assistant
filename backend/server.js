@@ -7,6 +7,16 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Hamilton Suburb Decision Assistant API',
+    endpoints: {
+      health: '/api/health',
+      rentalPriceCheck: '/api/rental-price-check?sa2_code=...&dwelling_type=...&number_of_beds=...',
+    },
+  });
+});
+
 // Confirms the server is up and the db connection + foreign_keys pragma are live.
 app.get('/api/health', (req, res) => {
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM suburbs').get();
