@@ -48,10 +48,11 @@ Te Rapa South's only data is ~7 quarters old. Numbers are still returned, plus a
 curl "http://localhost:3001/api/rental-price-check?sa2_code=176300&dwelling_type=ALL&number_of_beds=ALL"
 ```
 
-## Omitted number_of_beds (NULL category)
+## Omitted number_of_beds (defaults to ALL)
 
-Leaving `number_of_beds` out entirely requests the rent table's distinct NULL-beds
-category for Flagstaff North House (not the same as `number_of_beds=ALL`).
+Leaving `number_of_beds` out entirely means "any bed count" and resolves to the
+standard `number_of_beds=ALL` aggregate — this should return an identical response
+to the normal exact-match example above with `number_of_beds=ALL` added explicitly.
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House"
