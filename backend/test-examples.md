@@ -14,17 +14,29 @@ curl "http://localhost:3001/api/health"
 ## Normal exact-match lookup
 
 Flagstaff North, House, 2 beds — has good coverage, so this hits the exact row
-directly. `fallback` should be `false`.
+directly. `fallback_level` should be `'none'`.
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=2"
 ```
 
-## Fallback case
+## Intermediate fallback case (dwelling type kept, beds widened)
 
-Rotokauri-Waiwhakareke has no `Room` data at all, so this falls back to the
-suburb's overall `dwelling_type=ALL, number_of_beds=ALL` row. `fallback` should be
-`true`, with a `fallback_note`.
+Flagstaff North has no `House`/6-beds row, but does have a `House`/ALL row, so this
+falls back one tier — to the same dwelling type with `number_of_beds=ALL` — rather
+than jumping straight to the fully generic estimate. `fallback_level` should be
+`'dwelling_type'`, with a `fallback_note`.
+
+```
+curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=6"
+```
+
+## Full fallback case (dwelling type and beds both widened)
+
+Rotokauri-Waiwhakareke has no `Room` data at all (not even `Room`/ALL), so this
+falls back all the way to the suburb's overall `dwelling_type=ALL,
+number_of_beds=ALL` row. `fallback_level` should be `'full'`, with a
+`fallback_note`.
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=175400&dwelling_type=Room&number_of_beds=ALL"

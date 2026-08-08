@@ -24,9 +24,18 @@ const findSuburbStmt = db.prepare('SELECT sa2_code, sa2_name FROM suburbs WHERE 
 const findRentStmt = db.prepare(
   'SELECT * FROM rent WHERE sa2_code = ? AND dwelling_type = ? AND number_of_beds = ?'
 );
+const findDwellingTypeAllRentStmt = db.prepare(
+  "SELECT * FROM rent WHERE sa2_code = ? AND dwelling_type = ? AND number_of_beds = 'ALL'"
+);
 const findAllAllRentStmt = db.prepare(
   "SELECT * FROM rent WHERE sa2_code = ? AND dwelling_type = 'ALL' AND number_of_beds = 'ALL'"
 );
+
+// Keyed by fallback_level ('none' is never looked up here — no note applies).
+const FALLBACK_NOTES = {
+  dwelling_type: 'No data for the exact number of bedrooms — showing the median across all bed counts for this dwelling type in this suburb.',
+  full: 'No data for the exact dwelling type/bed count combination — showing a broader estimate across all dwelling types and bed counts for this suburb.',
+};
 
 function comparisonLabel(rent, lowerQuartile, upperQuartile) {
   if (lowerQuartile == null || upperQuartile == null) return null;
@@ -92,11 +101,18 @@ router.get('/rental-price-check', (req, res) => {
   }
 
   let row = findRentStmt.get(sa2Code, dwellingType, numberOfBeds);
-  let fallback = false;
+  let fallbackLevel = 'none';
+
+  // Tier 2 only makes sense when the requested beds weren't already
+  // 'ALL' — otherwise it's the same query as the exact match above.
+  if (!row && numberOfBeds !== 'ALL') {
+    row = findDwellingTypeAllRentStmt.get(sa2Code, dwellingType);
+    if (row) fallbackLevel = 'dwelling_type';
+  }
 
   if (!row) {
     row = findAllAllRentStmt.get(sa2Code);
-    fallback = row != null;
+    if (row) fallbackLevel = 'full';
   }
 
   if (!row) {
@@ -124,9 +140,9 @@ router.get('/rental-price-check', (req, res) => {
     median_rent: row.median_rent,
     lower_quartile_rent: row.lower_quartile_rent,
     upper_quartile_rent: row.upper_quartile_rent,
-    fallback,
-    ...(fallback && {
-      fallback_note: 'No data for the exact dwelling type/bed count combination — showing a broader estimate across all dwelling types and bed counts for this suburb.',
+    fallback_level: fallbackLevel,
+    ...(fallbackLevel !== 'none' && {
+      fallback_note: FALLBACK_NOTES[fallbackLevel],
     }),
     timeframe: row.timeframe,
     quarters_stale: row.quarters_stale,
