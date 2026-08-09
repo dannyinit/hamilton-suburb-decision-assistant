@@ -125,7 +125,12 @@ collapsed into a precomputed aggregate.
 | destination_id | INTEGER PK FK→destinations | |
 | distance_m | REAL | straight-line NZTM distance, metres |
 
-### Consumption rules for downstream features (not yet implemented)
+### Consumption rules for downstream features
+
+Both features below are now implemented in `backend/` — see
+[`backend/README.md`](backend/README.md) for the current, authoritative API contract
+(request/response shapes, fallback tiers, normalisation). The underlying data-layer
+rules that motivated the design are still accurate and kept here for context:
 
 - **Feature 1 — Suburb Finder (ranking):** exclude a suburb when `suburb_data_status.data_status != 'CURRENT'`,
   with reason `insufficient_data`, checked *before* the budget filter so a suburb never carries
