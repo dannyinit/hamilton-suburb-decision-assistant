@@ -50,29 +50,32 @@ function stalenessWarning(row) {
   return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
 }
 
-router.get('/rental-price-check', (req, res) => {
+// Pure computation, decoupled from Express req/res, so both the real route
+// and the examples route below can share the exact same logic — the
+// examples route calls this directly (in-process) rather than making an
+// HTTP request back to the server.
+function computeRentalPriceCheck(query) {
   const {
     sa2_code: sa2CodeRaw,
     dwelling_type: dwellingType,
     number_of_beds: numberOfBedsRaw,
     rent: rentRaw,
-  } = req.query;
+  } = query;
 
   if (!sa2CodeRaw || !dwellingType) {
-    return res.status(400).json({
-      error: 'sa2_code and dwelling_type are required',
-    });
+    return { status: 400, body: { error: 'sa2_code and dwelling_type are required' } };
   }
 
   const sa2Code = Number(sa2CodeRaw);
   if (!Number.isInteger(sa2Code)) {
-    return res.status(400).json({ error: 'sa2_code must be an integer' });
+    return { status: 400, body: { error: 'sa2_code must be an integer' } };
   }
 
   if (!VALID_DWELLING_TYPES.includes(dwellingType)) {
-    return res.status(400).json({
-      error: `dwelling_type must be one of: ${VALID_DWELLING_TYPES.join(', ')}`,
-    });
+    return {
+      status: 400,
+      body: { error: `dwelling_type must be one of: ${VALID_DWELLING_TYPES.join(', ')}` },
+    };
   }
 
   // Omitted/empty means "any bed count" and maps to the standard ALL
@@ -82,22 +85,23 @@ router.get('/rental-price-check', (req, res) => {
   // path and looking like missing data.
   const numberOfBeds = numberOfBedsRaw === undefined || numberOfBedsRaw === '' ? 'ALL' : numberOfBedsRaw;
   if (!VALID_NUMBER_OF_BEDS.includes(numberOfBeds)) {
-    return res.status(400).json({
-      error: `number_of_beds must be one of: ${VALID_NUMBER_OF_BEDS.join(', ')}`,
-    });
+    return {
+      status: 400,
+      body: { error: `number_of_beds must be one of: ${VALID_NUMBER_OF_BEDS.join(', ')}` },
+    };
   }
 
   let rent = null;
   if (rentRaw !== undefined) {
     rent = Number(rentRaw);
     if (!Number.isFinite(rent) || rent < 0) {
-      return res.status(400).json({ error: 'rent must be a non-negative number' });
+      return { status: 400, body: { error: 'rent must be a non-negative number' } };
     }
   }
 
   const suburb = findSuburbStmt.get(sa2Code);
   if (!suburb) {
-    return res.status(404).json({ error: `Unknown sa2_code: ${sa2Code}` });
+    return { status: 404, body: { error: `Unknown sa2_code: ${sa2Code}` } };
   }
 
   let row = findRentStmt.get(sa2Code, dwellingType, numberOfBeds);
@@ -116,39 +120,93 @@ router.get('/rental-price-check', (req, res) => {
   }
 
   if (!row) {
-    return res.json({
-      sa2_code: suburb.sa2_code,
-      sa2_name: suburb.sa2_name,
-      dwelling_type: dwellingType,
-      number_of_beds: numberOfBeds,
-      insufficient_data: true,
-      message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bed counts.`,
-    });
+    return {
+      status: 200,
+      body: {
+        sa2_code: suburb.sa2_code,
+        sa2_name: suburb.sa2_name,
+        dwelling_type: dwellingType,
+        number_of_beds: numberOfBeds,
+        insufficient_data: true,
+        message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bed counts.`,
+      },
+    };
   }
 
   const comparison = rent !== null
     ? comparisonLabel(rent, row.lower_quartile_rent, row.upper_quartile_rent)
     : null;
 
-  res.json({
-    sa2_code: suburb.sa2_code,
-    sa2_name: suburb.sa2_name,
-    requested_dwelling_type: dwellingType,
-    requested_number_of_beds: numberOfBeds,
-    dwelling_type: row.dwelling_type,
-    number_of_beds: row.number_of_beds,
-    median_rent: row.median_rent,
-    lower_quartile_rent: row.lower_quartile_rent,
-    upper_quartile_rent: row.upper_quartile_rent,
-    fallback_level: fallbackLevel,
-    ...(fallbackLevel !== 'none' && {
-      fallback_note: FALLBACK_NOTES[fallbackLevel],
-    }),
-    timeframe: row.timeframe,
-    quarters_stale: row.quarters_stale,
-    staleness_warning: stalenessWarning(row),
-    ...(rent !== null ? { rent, comparison } : {}),
+  return {
+    status: 200,
+    body: {
+      sa2_code: suburb.sa2_code,
+      sa2_name: suburb.sa2_name,
+      requested_dwelling_type: dwellingType,
+      requested_number_of_beds: numberOfBeds,
+      dwelling_type: row.dwelling_type,
+      number_of_beds: row.number_of_beds,
+      median_rent: row.median_rent,
+      lower_quartile_rent: row.lower_quartile_rent,
+      upper_quartile_rent: row.upper_quartile_rent,
+      fallback_level: fallbackLevel,
+      ...(fallbackLevel !== 'none' && {
+        fallback_note: FALLBACK_NOTES[fallbackLevel],
+      }),
+      timeframe: row.timeframe,
+      quarters_stale: row.quarters_stale,
+      staleness_warning: stalenessWarning(row),
+      ...(rent !== null ? { rent, comparison } : {}),
+    },
+  };
+}
+
+router.get('/rental-price-check', (req, res) => {
+  const { status, body } = computeRentalPriceCheck(req.query);
+  res.status(status).json(body);
+});
+
+// Static reference data for demos — no DB lookups, just a fixed list of
+// example URLs so each case can be opened directly in a browser without
+// having to remember the exact query params. Mirrors test-examples.md.
+const RENTAL_PRICE_CHECK_EXAMPLES = [
+  {
+    description: 'Normal exact match: Flagstaff North, House, 2 beds has good coverage, so this hits the exact row directly (fallback_level "none").',
+    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=2',
+  },
+  {
+    description: 'Intermediate fallback tier: Flagstaff North has no House/6-beds row, but does have a House/ALL row, so this falls back to the same dwelling type with all bed counts (fallback_level "dwelling_type").',
+    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=6',
+  },
+  {
+    description: 'Full fallback tier: Rotokauri-Waiwhakareke has no Room data at all, so this falls back all the way to the suburb overall ALL/ALL row (fallback_level "full").',
+    url: '/api/rental-price-check?sa2_code=175400&dwelling_type=Room&number_of_beds=ALL',
+  },
+  {
+    description: 'NO_DATA: Te Rapa North has zero rent rows at all, even the ALL/ALL fallback, so the response has insufficient_data true and no numbers.',
+    url: '/api/rental-price-check?sa2_code=175200&dwelling_type=House&number_of_beds=ALL',
+  },
+  {
+    description: 'STALE: Te Rapa South only data is about 7 quarters old. Numbers are still returned, plus a staleness_warning stating exactly how old.',
+    url: '/api/rental-price-check?sa2_code=176300&dwelling_type=ALL&number_of_beds=ALL',
+  },
+  {
+    description: 'Invalid input: number_of_beds=99 is not in the documented value set, so this is rejected with a 400 instead of silently falling through to NO_DATA.',
+    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=99',
+  },
+  {
+    description: 'Rent comparison: same Flagstaff North House/ALL row, with a rent supplied so the response includes a comparison label (Below market, since 600 is under the lower quartile).',
+    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=ALL&rent=600',
+  },
+];
+
+router.get('/rental-price-check-examples', (req, res) => {
+  const withResults = RENTAL_PRICE_CHECK_EXAMPLES.map((example) => {
+    const { searchParams } = new URL(example.url, 'http://localhost');
+    const { body } = computeRentalPriceCheck(Object.fromEntries(searchParams));
+    return { ...example, result: body };
   });
+  res.json(withResults);
 });
 
 module.exports = router;

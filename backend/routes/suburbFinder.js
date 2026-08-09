@@ -87,29 +87,34 @@ function parseWeight(raw, paramName) {
   return value;
 }
 
-router.get('/suburb-finder', (req, res) => {
+// Pure computation, decoupled from Express req/res, so both the real route
+// and the examples route below can share the exact same logic — the
+// examples route calls this directly (in-process) rather than making an
+// HTTP request back to the server.
+function computeSuburbFinder(query) {
   const {
     budget: budgetRaw,
     destination: destinationName,
     rent_weight: rentWeightRaw,
     transport_weight: transportWeightRaw,
     distance_weight: distanceWeightRaw,
-  } = req.query;
+  } = query;
 
   if (!budgetRaw || !destinationName) {
-    return res.status(400).json({ error: 'budget and destination are required' });
+    return { status: 400, body: { error: 'budget and destination are required' } };
   }
 
   const budget = Number(budgetRaw);
   if (!Number.isFinite(budget) || budget < 0) {
-    return res.status(400).json({ error: 'budget must be a non-negative number' });
+    return { status: 400, body: { error: 'budget must be a non-negative number' } };
   }
 
   const destination = destinationByName.get(destinationName);
   if (!destination) {
-    return res.status(400).json({
-      error: `destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}`,
-    });
+    return {
+      status: 400,
+      body: { error: `destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}` },
+    };
   }
 
   // Each weight defaults independently to 1 (an unset slider), then all
@@ -124,12 +129,15 @@ router.get('/suburb-finder', (req, res) => {
     transportWeight = parseWeight(transportWeightRaw, 'transport_weight');
     distanceWeight = parseWeight(distanceWeightRaw, 'distance_weight');
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return { status: 400, body: { error: err.message } };
   }
 
   const weightSum = rentWeight + transportWeight + distanceWeight;
   if (weightSum === 0) {
-    return res.status(400).json({ error: 'rent_weight, transport_weight, and distance_weight cannot all be zero' });
+    return {
+      status: 400,
+      body: { error: 'rent_weight, transport_weight, and distance_weight cannot all be zero' },
+    };
   }
 
   const weightsUsed = {
@@ -183,17 +191,20 @@ router.get('/suburb-finder', (req, res) => {
       .filter((row) => row.data_status === 'CURRENT')
       .reduce((min, row) => (min === null || row.median_rent < min ? row.median_rent : min), null);
 
-    return res.json({
-      budget,
-      destination: destination.name,
-      weights_used: weightsUsed,
-      results: [],
-      excluded,
-      no_suburbs_in_budget: true,
-      message: cheapestCurrent === null
-        ? 'No suburbs have current rent data to compare against.'
-        : `No suburbs with current rent data fall within a $${budget}/week budget. The cheapest available suburb (with current data) is $${cheapestCurrent}/week.`,
-    });
+    return {
+      status: 200,
+      body: {
+        budget,
+        destination: destination.name,
+        weights_used: weightsUsed,
+        results: [],
+        excluded,
+        no_suburbs_in_budget: true,
+        message: cheapestCurrent === null
+          ? 'No suburbs have current rent data to compare against.'
+          : `No suburbs with current rent data fall within a $${budget}/week budget. The cheapest available suburb (with current data) is $${cheapestCurrent}/week.`,
+      },
+    };
   }
 
   // Per-criterion normalisation, applied only across `included` (post
@@ -246,13 +257,51 @@ router.get('/suburb-finder', (req, res) => {
   scored.sort((a, b) => b.overall_score - a.overall_score || a.sa2_code - b.sa2_code);
   const results = scored.map((suburb, i) => ({ rank: i + 1, ...suburb }));
 
-  res.json({
-    budget,
-    destination: destination.name,
-    weights_used: weightsUsed,
-    results,
-    excluded,
-  });
+  return {
+    status: 200,
+    body: {
+      budget,
+      destination: destination.name,
+      weights_used: weightsUsed,
+      results,
+      excluded,
+    },
+  };
+}
+
+router.get('/suburb-finder', (req, res) => {
+  const { status, body } = computeSuburbFinder(req.query);
+  res.status(status).json(body);
+});
+
+// Static reference data for demos — no DB lookups, just a fixed list of
+// example URLs so each case can be opened directly in a browser without
+// having to remember the exact query params.
+const SUBURB_FINDER_EXAMPLES = [
+  {
+    description: 'Normal case with multiple results: a $500/week budget near The Base returns 10 suburbs ranked by weighted score with equal-priority weights.',
+    url: '/api/suburb-finder?budget=500&destination=The%20Base',
+  },
+  {
+    description: 'Empty result set: a $300/week budget is below the cheapest available suburb ($340), so no suburbs qualify. The response includes a hint naming the cheapest suburb that does have current data.',
+    url: '/api/suburb-finder?budget=300&destination=The%20Base',
+  },
+  {
+    description: 'N=1 exact-tie case: a $345/week budget leaves exactly one suburb (Greensboro), so every criterion normalises to the neutral tie value 0.5 and overall_score is 0.5.',
+    url: '/api/suburb-finder?budget=345&destination=The%20Base',
+  },
+  {
+    description: 'Different weight priorities: same $500 budget and destination as the normal case, but weighted entirely toward rent (rent_weight=1, transport_weight=0, distance_weight=0), so the ranking collapses to cheapest-first.',
+    url: '/api/suburb-finder?budget=500&destination=The%20Base&rent_weight=1&transport_weight=0&distance_weight=0',
+  },
+];
+
+// Unlike rental-price-check-examples, this intentionally stays
+// description + url only (no live result field) — a suburb-finder result
+// can carry up to 10 full score-broken-down suburbs, which is too long to
+// skim during a demo.
+router.get('/suburb-finder-examples', (req, res) => {
+  res.json(SUBURB_FINDER_EXAMPLES);
 });
 
 module.exports = router;
