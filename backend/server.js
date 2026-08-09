@@ -13,6 +13,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/health',
       rentalPriceCheck: '/api/rental-price-check?sa2_code=...&dwelling_type=...&number_of_beds=...',
+      suburbFinder: '/api/suburb-finder?budget=...&destination=...&rent_weight=...&transport_weight=...&distance_weight=...',
     },
   });
 });
