@@ -23,7 +23,8 @@ backend/
 ├── routes/
 │   ├── index.js                 # collects every feature's router
 │   ├── rentalPriceCheck.js      # GET /api/rental-price-check
-│   └── suburbFinder.js          # GET /api/suburb-finder
+│   ├── suburbFinder.js          # GET /api/suburb-finder
+│   └── suburbs.js               # GET /api/suburbs
 ├── tests/
 │   └── test_suburb_finder.py    # regression script, run against a live server
 └── test-examples.md             # ready-to-paste curl examples for manual testing
@@ -56,6 +57,26 @@ not just configured in code:
 
 ```json
 { "status": "ok", "suburbCount": 62, "foreignKeysOn": true }
+```
+
+### `GET /api/suburbs`
+
+Static reference data — all 62 suburbs (`sa2_code` + `sa2_name`, alphabetical by name),
+for populating frontend suburb pickers. No query parameters. Unfiltered by
+`suburb_data_status` deliberately: that field is specific to Suburb Finder's hard
+constraints (the ALL/ALL rent row), not a general "can this suburb be looked up at
+all" flag — Rental Price Check already reports its own per-request
+`insufficient_data`/`staleness_warning` independent of this table, and this list is
+meant to include suburbs like Te Rapa North (`NO_DATA`) precisely so their fallback
+behaviour is reachable from the UI.
+
+```json
+{
+  "suburbs": [
+    { "sa2_code": 180500, "sa2_name": "Bader" },
+    { "sa2_code": 177600, "sa2_name": "Beerescourt" }
+  ]
+}
 ```
 
 ### `GET /api/rental-price-check`
@@ -236,6 +257,9 @@ just truncated here the same way):
 
 ## Testing
 
+- **`/api/suburbs`:** manual — see [test-examples.md](test-examples.md). No
+  parameters and no branching logic to cover (a single cached query result), so a
+  regression script would just be re-asserting the row count; not worth automating.
 - **Rental Price Check:** manual — see [test-examples.md](test-examples.md) for
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
   STALE, invalid input, rent comparison).

@@ -11,6 +11,14 @@ Confirms the server is up, connected to `hamilton.db`, and `foreign_keys` is on.
 curl "http://localhost:3001/api/health"
 ```
 
+## Suburb list (for populating a picker)
+
+All 62 suburbs, `sa2_code` + `sa2_name`, alphabetical. No parameters.
+
+```
+curl "http://localhost:3001/api/suburbs"
+```
+
 ## Normal exact-match lookup
 
 Flagstaff North, House, 2 beds — has good coverage, so this hits the exact row
