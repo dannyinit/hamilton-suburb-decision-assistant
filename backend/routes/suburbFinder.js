@@ -74,6 +74,23 @@ const findCandidatesStmt = db.prepare(`
   ORDER BY s.sa2_code
 `);
 
+// Same as findCandidatesStmt but without the destination join/column, for
+// when destination is omitted and distance isn't being scored at all —
+// no point joining a table whose data won't be used.
+const findCandidatesNoDestinationStmt = db.prepare(`
+  SELECT
+    s.sa2_code,
+    s.sa2_name,
+    sds.data_status,
+    r.median_rent,
+    sba.bus_stop_count_500m AS bus_stop_count
+  FROM suburbs s
+  JOIN suburb_data_status sds ON sds.sa2_code = s.sa2_code
+  LEFT JOIN rent r ON r.sa2_code = s.sa2_code AND r.dwelling_type = 'ALL' AND r.number_of_beds = 'ALL'
+  JOIN suburb_bus_access sba ON sba.sa2_code = s.sa2_code
+  ORDER BY s.sa2_code
+`);
+
 function parseWeight(raw, paramName) {
   // Omitted or empty means "not specified" -> default to 1 (an untouched
   // slider). A present '0' is a deliberate "I don't care about this
@@ -100,8 +117,8 @@ function computeSuburbFinder(query) {
     distance_weight: distanceWeightRaw,
   } = query;
 
-  if (!budgetRaw || !destinationName) {
-    return { status: 400, body: { error: 'budget and destination are required' } };
+  if (!budgetRaw) {
+    return { status: 400, body: { error: 'budget is required' } };
   }
 
   const budget = Number(budgetRaw);
@@ -109,48 +126,77 @@ function computeSuburbFinder(query) {
     return { status: 400, body: { error: 'budget must be a non-negative number' } };
   }
 
-  const destination = destinationByName.get(destinationName);
-  if (!destination) {
-    return {
-      status: 400,
-      body: { error: `destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}` },
-    };
+  // destination is optional: omitted entirely (key absent) means "don't
+  // score distance at all" and destination stays null. Present-but-empty
+  // or present-but-invalid both still fail validation below, same as a
+  // typo — an empty value isn't meaningfully different from a wrong one.
+  let destination = null;
+  if (destinationName !== undefined) {
+    destination = destinationByName.get(destinationName);
+    if (!destination) {
+      return {
+        status: 400,
+        body: { error: `destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}` },
+      };
+    }
   }
+  const hasDestination = destination !== null;
 
-  // Each weight defaults independently to 1 (an unset slider), then all
-  // three are normalised together below — so rent_weight=2 with the other
-  // two omitted means "rent matters twice as much as each of the others",
-  // not an error.
+  // Each weight defaults independently to 1 (an unset slider), then
+  // whichever weights are in play are normalised together below — so
+  // rent_weight=2 with transport_weight omitted means "rent matters twice
+  // as much as transport", not an error. distance_weight is only parsed
+  // (and only participates in the sum) when a destination was given —
+  // without a destination there's no distance score for it to weight.
   let rentWeight;
   let transportWeight;
-  let distanceWeight;
   try {
     rentWeight = parseWeight(rentWeightRaw, 'rent_weight');
     transportWeight = parseWeight(transportWeightRaw, 'transport_weight');
-    distanceWeight = parseWeight(distanceWeightRaw, 'distance_weight');
   } catch (err) {
     return { status: 400, body: { error: err.message } };
   }
 
-  const weightSum = rentWeight + transportWeight + distanceWeight;
-  if (weightSum === 0) {
-    return {
-      status: 400,
-      body: { error: 'rent_weight, transport_weight, and distance_weight cannot all be zero' },
-    };
+  let distanceWeight = 0;
+  if (hasDestination) {
+    try {
+      distanceWeight = parseWeight(distanceWeightRaw, 'distance_weight');
+    } catch (err) {
+      return { status: 400, body: { error: err.message } };
+    }
+  } else if (distanceWeightRaw !== undefined) {
+    // Silently ignored per design decision — logged so it's visible during
+    // development/debugging without affecting the response.
+    console.warn('suburb-finder: distance_weight was supplied without a destination; ignoring it.');
   }
 
-  const weightsUsed = {
-    rent: rentWeight / weightSum,
-    transport: transportWeight / weightSum,
-    distance: distanceWeight / weightSum,
-  };
+  const weightSum = rentWeight + transportWeight + distanceWeight;
+  if (weightSum === 0) {
+    const applicableWeightNames = hasDestination
+      ? 'rent_weight, transport_weight, and distance_weight'
+      : 'rent_weight and transport_weight';
+    return { status: 400, body: { error: `${applicableWeightNames} cannot all be zero` } };
+  }
 
-  const candidates = findCandidatesStmt.all(destination.destination_id);
+  const weightsUsed = hasDestination
+    ? {
+      rent: rentWeight / weightSum,
+      transport: transportWeight / weightSum,
+      distance: distanceWeight / weightSum,
+    }
+    : {
+      rent: rentWeight / weightSum,
+      transport: transportWeight / weightSum,
+    };
+
+  const candidates = hasDestination
+    ? findCandidatesStmt.all(destination.destination_id)
+    : findCandidatesNoDestinationStmt.all();
 
   // Hard constraints, in order: data quality first, then budget — so a
   // suburb never carries both an insufficient_data and an exceeds_budget
   // reason at once (per data-pipeline/README.md's documented ordering).
+  // Unaffected by destination — neither check reads distance_m.
   const excluded = [];
   const included = [];
 
@@ -180,9 +226,14 @@ function computeSuburbFinder(query) {
       sa2_name: row.sa2_name,
       median_rent: row.median_rent,
       bus_stop_count: row.bus_stop_count,
-      distance_m: row.distance_m,
+      ...(hasDestination && { distance_m: row.distance_m }),
     });
   }
+
+  const distanceExcludedFields = hasDestination ? {} : {
+    distance_excluded: true,
+    distance_excluded_note: 'No destination was provided, so distance could not be scored. rent_weight and transport_weight were re-normalised to fill the remaining weight.',
+  };
 
   // Nothing to normalise against with zero survivors — short-circuit
   // before any of the per-criterion min/max logic below.
@@ -195,7 +246,8 @@ function computeSuburbFinder(query) {
       status: 200,
       body: {
         budget,
-        destination: destination.name,
+        destination: hasDestination ? destination.name : null,
+        ...distanceExcludedFields,
         weights_used: weightsUsed,
         results: [],
         excluded,
@@ -220,24 +272,28 @@ function computeSuburbFinder(query) {
     threshold: TRANSPORT_THRESHOLD,
     reverse: false, // benefit: more bus stops is better
   });
-  const distanceScores = normaliseCriterion(included, {
-    getValue: (s) => s.distance_m,
-    threshold: DISTANCE_THRESHOLDS[destination.name],
-    reverse: true, // cost: shorter distance is better
-  });
+  const distanceScores = hasDestination
+    ? normaliseCriterion(included, {
+      getValue: (s) => s.distance_m,
+      threshold: DISTANCE_THRESHOLDS[destination.name],
+      reverse: true, // cost: shorter distance is better
+    })
+    : null;
 
   // Weighted Sum Model: overall_score is the weights-normalised dot product
-  // of the three per-criterion scores. score_breakdown carries each
+  // of the per-criterion scores in play. score_breakdown carries each
   // criterion's raw value alongside its normalised score, so the frontend
-  // can show "why" a suburb scored the way it did, not just the final number.
+  // can show "why" a suburb scored the way it did, not just the final
+  // number — distance is omitted from score_breakdown entirely (not just
+  // left null) when there's no destination, per distance_excluded above.
   const scored = included.map((suburb, i) => {
     const rentScore = rentScores[i];
     const transportScore = transportScores[i];
-    const distanceScore = distanceScores[i];
+    const distanceScore = hasDestination ? distanceScores[i] : null;
     const overallScore = Math.round(
       (weightsUsed.rent * rentScore
         + weightsUsed.transport * transportScore
-        + weightsUsed.distance * distanceScore) * 10000
+        + (hasDestination ? weightsUsed.distance * distanceScore : 0)) * 10000
     ) / 10000;
 
     return {
@@ -247,7 +303,9 @@ function computeSuburbFinder(query) {
       score_breakdown: {
         rent: { value: suburb.median_rent, normalised_score: rentScore },
         transport: { value: suburb.bus_stop_count, normalised_score: transportScore },
-        distance: { value: suburb.distance_m, normalised_score: distanceScore },
+        ...(hasDestination && {
+          distance: { value: suburb.distance_m, normalised_score: distanceScore },
+        }),
       },
     };
   });
@@ -261,7 +319,8 @@ function computeSuburbFinder(query) {
     status: 200,
     body: {
       budget,
-      destination: destination.name,
+      destination: hasDestination ? destination.name : null,
+      ...distanceExcludedFields,
       weights_used: weightsUsed,
       results,
       excluded,
