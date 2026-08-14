@@ -117,8 +117,9 @@ chosen destination, after applying hard budget/data-quality constraints.
 | param | required | notes |
 |---|---|---|
 | `budget` | yes | non-negative weekly rent budget |
-| `destination` | yes | must exactly match a name in the `destinations` table: `University of Waikato`, `Transport Centre`, `The Base`, `Waikato Hospital` |
-| `rent_weight`, `transport_weight`, `distance_weight` | no | each defaults independently to `1` if omitted or empty (an untouched slider); a present `0` is respected as "don't care about this criterion" and is not defaulted away. All three are normalised together to sum to 1. Cannot all be `0` at once |
+| `destination` | no | must exactly match a name in the `destinations` table: `University of Waikato`, `Transport Centre`, `The Base`, `Waikato Hospital`. Omitting the key entirely excludes distance from scoring (see "Optional destination" below) — but a present, empty, or unrecognised value (`destination=`, a typo) still fails validation with `400`, same as before. Only a fully absent key counts as "not provided" |
+| `rent_weight`, `transport_weight` | no | each defaults independently to `1` if omitted or empty (an untouched slider); a present `0` is respected as "don't care about this criterion" and is not defaulted away. Normalised together (with `distance_weight`, if applicable) to sum to 1 |
+| `distance_weight` | no | same rules as the other weights, but only has any effect when `destination` is provided. If supplied without a `destination`, it's silently ignored (logged server-side via `console.warn`, not surfaced in the response) |
 
 **Hard constraints**, applied in this order so no suburb ever carries both reasons:
 1. `suburb_data_status.data_status != 'CURRENT'` → excluded, reason `insufficient_data`
@@ -126,6 +127,21 @@ chosen destination, after applying hard budget/data-quality constraints.
 
 If no suburb survives both constraints, the response is `results: []` with
 `no_suburbs_in_budget: true` and a message naming the cheapest available suburb.
+This is unaffected by whether `destination` was provided — neither hard
+constraint reads distance.
+
+**Optional destination:** when `destination` is omitted, the distance
+criterion is excluded from scoring entirely — not assigned a neutral score,
+just left out — and `rent_weight`/`transport_weight` are re-normalised
+proportionally to fill the full weight between just the two of them (the same
+sum-then-divide mechanism as always, just with fewer terms in the sum). The
+response reflects this explicitly rather than silently: `destination: null`,
+a top-level `distance_excluded: true` with a `distance_excluded_note`
+explaining why, `weights_used` with only `rent`/`transport` keys, and each
+suburb's `score_breakdown` with only `rent`/`transport` keys (not a `distance`
+key with a null value). If both `rent_weight` and `transport_weight` are `0`
+with no destination, the `400` error message names only those two params, not
+`distance_weight`.
 
 **Scoring**, applied only across the suburbs that survive both hard constraints
 (not all 62 — ranking should reflect relative comparison among viable options):
@@ -175,6 +191,39 @@ If no suburb survives both constraints, the response is `results: []` with
         "rent": { "value": 400, "normalised_score": 0.625 },
         "transport": { "value": 28, "normalised_score": 1 },
         "distance": { "value": 5982.44, "normalised_score": 0.6789 }
+      }
+    }
+  ],
+  "excluded": [
+    { "sa2_code": 175200, "sa2_name": "Te Rapa North", "reason": "insufficient_data", "data_status": "NO_DATA" },
+    { "sa2_code": 175300, "sa2_name": "Flagstaff North", "reason": "exceeds_budget", "median_rent": 750 }
+  ]
+}
+```
+
+**Example response, no destination** (same budget, `destination` omitted — note
+the re-normalised `weights_used`, the `distance_excluded` fields, and the
+two-key `score_breakdown`; the ranking and `overall_score` differ from the
+example above because distance no longer factors in. `excluded` is the same 52
+entries as the example above — hard constraints don't depend on destination —
+just truncated here the same way):
+
+```json
+{
+  "budget": 500,
+  "destination": null,
+  "distance_excluded": true,
+  "distance_excluded_note": "No destination was provided, so distance could not be scored. rent_weight and transport_weight were re-normalised to fill the remaining weight.",
+  "weights_used": { "rent": 0.5, "transport": 0.5 },
+  "results": [
+    {
+      "rank": 1,
+      "sa2_code": 179400,
+      "sa2_name": "Hamilton Central",
+      "overall_score": 0.8125,
+      "score_breakdown": {
+        "rent": { "value": 400, "normalised_score": 0.625 },
+        "transport": { "value": 28, "normalised_score": 1 }
       }
     }
   ],
