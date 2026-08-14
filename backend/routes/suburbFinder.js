@@ -353,6 +353,10 @@ const SUBURB_FINDER_EXAMPLES = [
     description: 'Different weight priorities: same $500 budget and destination as the normal case, but weighted entirely toward rent (rent_weight=1, transport_weight=0, distance_weight=0), so the ranking collapses to cheapest-first.',
     url: '/api/suburb-finder?budget=500&destination=The%20Base&rent_weight=1&transport_weight=0&distance_weight=0',
   },
+  {
+    description: 'No destination (optional): same $500 budget as the normal case, but destination is omitted entirely. Distance is excluded from scoring rather than given a neutral score, rent_weight and transport_weight are re-normalised to fill the full weight, and the response includes destination: null and distance_excluded: true.',
+    url: '/api/suburb-finder?budget=500',
+  },
 ];
 
 // Unlike rental-price-check-examples, this intentionally stays
