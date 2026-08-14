@@ -1,0 +1,28 @@
+.app {
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 1.5rem;
+}
+
+.status-card {
+  border: 1px solid #d6d3d1;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fff;
+}
+
+.status-card.ok {
+  border-color: #16a34a;
+}
+
+.status-card.error {
+  border-color: #dc2626;
+}
+
+.status-card pre {
+  background: #f5f5f4;
+  padding: 0.75rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+}
