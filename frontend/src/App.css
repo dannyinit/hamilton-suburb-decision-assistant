@@ -1,8 +1,79 @@
 .app {
-  max-width: 480px;
+  max-width: 800px;
   margin: 3rem auto;
   padding: 1.5rem;
 }
+
+.lede {
+  color: #57534e;
+  margin-top: 0;
+}
+
+.rental-price-check-layout {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.rental-form,
+.rental-price-check-layout > .status-card {
+  flex: 1 1 320px;
+}
+
+/* Form */
+
+.rental-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid #d6d3d1;
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: #fff;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.field label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.field select,
+.field input {
+  padding: 0.5rem;
+  border: 1px solid #a8a29e;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.field-error {
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.rental-form button {
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #0e7490;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.rental-form button:disabled {
+  background: #a8a29e;
+  cursor: not-allowed;
+}
+
+/* Result */
 
 .status-card {
   border: 1px solid #d6d3d1;
@@ -25,4 +96,68 @@
   border-radius: 4px;
   overflow-x: auto;
   font-size: 0.85rem;
+}
+
+.result-card h2 {
+  margin-top: 0;
+}
+
+.banner {
+  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.banner-info {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.banner-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.rent-stats {
+  display: flex;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.rent-stats dt {
+  font-size: 0.8rem;
+  color: #57534e;
+}
+
+.rent-stats dd {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.result-meta {
+  color: #57534e;
+  font-size: 0.9rem;
+}
+
+.comparison-badge {
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.comparison-below {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.comparison-fair {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.comparison-above {
+  background: #fee2e2;
+  color: #991b1b;
 }
