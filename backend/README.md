@@ -240,10 +240,11 @@ just truncated here the same way):
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
   STALE, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 32 checks run
-  against a live server (validation, empty result set, exact-tie, normal ranking,
-  full population, all 4 destinations, zero-bus-stop suburbs, determinism,
-  zero-weight criteria). Start the server first, then:
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 44 checks run
+  against a live server (validation, optional destination, empty result set,
+  exact-tie, normal ranking, full population, all 4 destinations,
+  zero-bus-stop suburbs, determinism, zero-weight criteria). Start the server
+  first, then:
 
   ```
   python3 backend/tests/test_suburb_finder.py
