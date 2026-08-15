@@ -141,6 +141,16 @@
   font-size: 0.9rem;
 }
 
+.result-meta p {
+  margin: 0;
+}
+
+/* Prevents the date from ever breaking mid-string at narrow widths (CSS
+   treats hyphens as break opportunities, and "2026-01-01" has three). */
+.result-meta-date {
+  white-space: nowrap;
+}
+
 .comparison-badge {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;

@@ -100,13 +100,14 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </div>
       </dl>
 
-      <p className="result-meta">
-        {data.dwelling_type === 'ALL' ? 'All dwelling types' : data.dwelling_type}
-        {', '}
-        {data.number_of_beds === 'ALL' ? 'all bed counts' : `${data.number_of_beds} bed(s)`}
-        {' — as of '}
-        {data.timeframe}
-      </p>
+      <div className="result-meta">
+        <p>
+          {data.dwelling_type === 'ALL' ? 'All dwelling types' : data.dwelling_type}
+          {', '}
+          {data.number_of_beds === 'ALL' ? 'all bed counts' : `${data.number_of_beds} bed(s)`}
+        </p>
+        <p className="result-meta-date">as of {data.timeframe}</p>
+      </div>
 
       {data.comparison && (
         <p className={`comparison-badge ${COMPARISON_CLASS[data.comparison] ?? ''}`}>
