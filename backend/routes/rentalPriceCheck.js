@@ -166,6 +166,38 @@ router.get('/rental-price-check', (req, res) => {
   res.status(status).json(body);
 });
 
+// Reference data for the frontend's Bedrooms dropdown: which number_of_beds
+// values have an *exact* rent row for each (sa2_code, dwelling_type) pair,
+// so the UI can offer only the bed counts that won't just fall back to a
+// broader estimate. Deliberately exact-match only, not "reachable via
+// fallback" — fallback_level 'dwelling_type'/'full' succeed the same way
+// regardless of which beds value was requested (neither fallback query
+// even looks at it), so that signal doesn't vary per bed count and
+// wouldn't filter anything meaningful out. Excludes number_of_beds IS NULL
+// (the separate undocumented MBIE category computeRentalPriceCheck also
+// never exposes) and 'ALL' (not a selectable bed count in the dropdown).
+//
+// Cached once at startup, like suburbs.js and suburbFinder.js's
+// destinations — this is static reference data derived from a read-only
+// DB, not something that changes per-request.
+const bedAvailabilityRows = db.prepare(
+  `SELECT sa2_code, dwelling_type, number_of_beds
+   FROM rent
+   WHERE number_of_beds IS NOT NULL AND number_of_beds != 'ALL'
+   ORDER BY sa2_code, dwelling_type, number_of_beds`
+).all();
+
+const bedAvailability = {};
+for (const row of bedAvailabilityRows) {
+  const bySuburb = (bedAvailability[row.sa2_code] ??= {});
+  const beds = (bySuburb[row.dwelling_type] ??= []);
+  beds.push(row.number_of_beds);
+}
+
+router.get('/rental-price-check-bed-availability', (req, res) => {
+  res.json(bedAvailability);
+});
+
 // Static reference data for demos — no DB lookups, just a fixed list of
 // example URLs so each case can be opened directly in a browser without
 // having to remember the exact query params. Mirrors test-examples.md.

@@ -128,6 +128,31 @@ Finder's 4 quarters (see the root README's "Consumption rules" section for why).
 See [test-examples.md](test-examples.md) for one ready-to-run example per case
 (exact match, both fallback tiers, NO_DATA, STALE, invalid input, rent comparison).
 
+### `GET /api/rental-price-check-bed-availability`
+
+Reference data for the frontend's Bedrooms dropdown: which `number_of_beds` values
+have an *exact* rent row for each suburb/dwelling type, so the UI can offer only
+the bed counts that won't just fall back to a broader estimate. No query
+parameters — one static object covering every suburb/dwelling type at once.
+
+Deliberately **exact-match only**, not "reachable via fallback": fallback tiers
+`dwelling_type`/`full` succeed the same way no matter which bed count was
+requested (neither fallback query looks at it), so that's not a signal that
+varies per bed count. Excludes the separate undocumented NULL-beds MBIE
+category (same exclusion `/api/rental-price-check` itself applies) and `'ALL'`
+(not a selectable bed count).
+
+```json
+{
+  "175300": { "ALL": ["1", "2", "3", "4", "5+"], "House": ["1", "2", "3", "4", "5+"], "Room": ["1"] },
+  "175400": { "ALL": ["4"], "House": ["4"] }
+}
+```
+
+A suburb/dwelling type combo with zero exact rows (e.g. Flagstaff North +
+Apartment) is simply absent from its suburb's object — the frontend treats a
+missing key as "no bed-specific options, only the general estimate."
+
 ### `GET /api/suburb-finder`
 
 Ranks suburbs by a weighted score across rent, transport access, and distance to a
@@ -260,6 +285,9 @@ just truncated here the same way):
 - **`/api/suburbs`:** manual — see [test-examples.md](test-examples.md). No
   parameters and no branching logic to cover (a single cached query result), so a
   regression script would just be re-asserting the row count; not worth automating.
+- **`/api/rental-price-check-bed-availability`:** manual — see
+  [test-examples.md](test-examples.md). Same reasoning as `/api/suburbs`: no
+  parameters, one cached lookup, nothing to regress.
 - **Rental Price Check:** manual — see [test-examples.md](test-examples.md) for
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
   STALE, invalid input, rent comparison).

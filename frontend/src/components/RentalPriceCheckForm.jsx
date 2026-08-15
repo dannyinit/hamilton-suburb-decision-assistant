@@ -1,7 +1,24 @@
 import { DWELLING_TYPES, NUMBER_OF_BEDS_OPTIONS } from '../rentalCheckOptions';
 
-function RentalPriceCheckForm({ suburbs, suburbsError, values, onChange, onSubmit, submitting }) {
+function RentalPriceCheckForm({
+  suburbs,
+  suburbsError,
+  values,
+  onChange,
+  onSubmit,
+  submitting,
+  availableBeds,
+  showAllBeds,
+  onShowAllBedsChange,
+}) {
   const suburbsLoading = !suburbs && !suburbsError;
+
+  // availableBeds is null before there's enough info to filter (no suburb
+  // picked yet, or the lookup hasn't loaded) — show everything in that
+  // case, same as if "show all" were checked.
+  const bedsToShow = showAllBeds || availableBeds === null
+    ? NUMBER_OF_BEDS_OPTIONS
+    : NUMBER_OF_BEDS_OPTIONS.filter((option) => availableBeds.includes(option.value));
 
   function handleFieldChange(field) {
     return (e) => onChange({ ...values, [field]: e.target.value });
@@ -59,12 +76,20 @@ function RentalPriceCheckForm({ suburbs, suburbsError, values, onChange, onSubmi
           onChange={handleFieldChange('number_of_beds')}
         >
           <option value="">Any (all bed counts)</option>
-          {NUMBER_OF_BEDS_OPTIONS.map((option) => (
+          {bedsToShow.map((option) => (
             <option key={option.value} value={option.value} title={option.title}>
               {option.label}
             </option>
           ))}
         </select>
+        <label className="field-checkbox">
+          <input
+            type="checkbox"
+            checked={showAllBeds}
+            onChange={(e) => onShowAllBedsChange(e.target.checked)}
+          />
+          Show all bedroom counts (including ones with no data)
+        </label>
       </div>
 
       <div className="field">

@@ -19,6 +19,15 @@ All 62 suburbs, `sa2_code` + `sa2_name`, alphabetical. No parameters.
 curl "http://localhost:3001/api/suburbs"
 ```
 
+## Bed availability lookup (for filtering the Bedrooms dropdown)
+
+Which number_of_beds values have an exact row for each suburb/dwelling type. No
+parameters.
+
+```
+curl "http://localhost:3001/api/rental-price-check-bed-availability"
+```
+
 ## Normal exact-match lookup
 
 Flagstaff North, House, 2 beds — has good coverage, so this hits the exact row

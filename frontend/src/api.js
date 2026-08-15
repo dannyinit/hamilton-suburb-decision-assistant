@@ -14,6 +14,18 @@ export async function getSuburbs() {
   return data.suburbs;
 }
 
+// GET /api/rental-price-check-bed-availability
+// -> { [sa2_code]: { [dwelling_type]: [number_of_beds, ...] } }
+// See backend/routes/rentalPriceCheck.js. A suburb/dwelling type combo with
+// no exact bed-count rows is simply absent from the response.
+export async function getBedAvailability() {
+  const res = await fetch(`${API_BASE}/rental-price-check-bed-availability`);
+  if (!res.ok) {
+    throw new Error(`Could not load bedroom availability (status ${res.status}).`);
+  }
+  return res.json();
+}
+
 // GET /api/rental-price-check?sa2_code=...&dwelling_type=...&number_of_beds=...&rent=...
 // See backend/routes/rentalPriceCheck.js. `params` values that are '' or
 // undefined are omitted from the query string entirely, matching the
