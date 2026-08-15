@@ -1,4 +1,4 @@
-import { getDwellingTypeLabel, getNumberOfBedsLabel } from '../rentalCheckOptions';
+import { getDwellingTypeLabel, getDwellingTypePluralLabel, getNumberOfBedsLabel } from '../rentalCheckOptions';
 
 const COMPARISON_CLASS = {
   'Below market': 'comparison-below',
@@ -21,16 +21,19 @@ function dwellingTypeFallbackNote(data) {
   // label doesn't follow that pattern.
   const bedsLabel = getNumberOfBedsLabel(data.requested_number_of_beds).replace('bedrooms', 'bedroom');
   const dwellingTypeLabel = getDwellingTypeLabel(data.requested_dwelling_type);
-
-  // Pluralising "House" -> "Houses" etc. is a plain +'s', correct for
-  // every real dwelling type in the current fixed list. 'ALL' ("Any
-  // dwelling type") is the one exception — this fallback tier can (rarely)
-  // fire for it too, when it lands on the same ALL/ALL row the 'full' tier
-  // would also reach — and "Any dwelling types" reads wrong, so it's left
-  // unpluralised in that case.
-  const dwellingTypePlural = data.requested_dwelling_type === 'ALL' ? dwellingTypeLabel : `${dwellingTypeLabel}s`;
+  const dwellingTypePlural = getDwellingTypePluralLabel(data.requested_dwelling_type);
 
   return `No data for ${bedsLabel} ${dwellingTypePlural} in ${data.sa2_name} — showing the ${dwellingTypeLabel} median rent across all bed counts instead.`;
+}
+
+// fallback_level 'full' means: neither the exact bed count nor the exact
+// dwelling type had data, so the suburb's overall ALL/ALL row is shown.
+// No bed count is mentioned here (unlike dwellingTypeFallbackNote) since
+// this tier has already fallen back past both dwelling type and bed
+// count — there's nothing specific left to say about beds.
+function fullFallbackNote(data) {
+  const dwellingTypePlural = getDwellingTypePluralLabel(data.requested_dwelling_type);
+  return `No data for ${dwellingTypePlural} in ${data.sa2_name} — showing the median rent across all dwelling types and bed counts instead.`;
 }
 
 function RentalPriceCheckResult({ status, data, errorMessage }) {
@@ -75,7 +78,7 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
       )}
 
       {data.fallback_level === 'full' && (
-        <div className="banner banner-info">{data.fallback_note}</div>
+        <div className="banner banner-info">{fullFallbackNote(data)}</div>
       )}
 
       {data.staleness_warning && (

@@ -55,6 +55,17 @@ export function getDwellingTypeLabel(value) {
   return DWELLING_TYPES.find((type) => type.value === value)?.label ?? value;
 }
 
+// Pluralised for use as a noun ("No data for Apartments in ...") rather
+// than as the adjective getDwellingTypeLabel gives ("the Apartment median
+// rent"). Plain +'s' is correct for every real dwelling type in the
+// current fixed list (House -> Houses, Boarding House -> Boarding Houses,
+// ...). 'ALL' ("Any dwelling type") is left unpluralised — "Any dwelling
+// types" reads wrong — since it isn't a countable noun.
+export function getDwellingTypePluralLabel(value) {
+  const label = getDwellingTypeLabel(value);
+  return value === 'ALL' ? label : `${label}s`;
+}
+
 export function getNumberOfBedsLabel(value) {
   return NUMBER_OF_BEDS_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
