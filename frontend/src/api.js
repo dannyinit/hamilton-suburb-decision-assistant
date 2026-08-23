@@ -50,3 +50,28 @@ export async function getRentalPriceCheck(params) {
 
   return data;
 }
+
+// GET /api/suburb-finder?budget=...&destination=...&rent_weight=...&transport_weight=...&distance_weight=...
+// See backend/routes/suburbFinder.js. Same "omit empty/undefined params"
+// rule as getRentalPriceCheck — important here specifically for
+// `destination`: omitting the key entirely means "no destination" (distance
+// excluded from scoring), which is different from sending an empty or
+// unrecognised value (both rejected with 400 by the backend).
+export async function getSuburbFinder(params) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') {
+      query.set(key, value);
+    }
+  }
+
+  const res = await fetch(`${API_BASE}/suburb-finder?${query}`);
+  const data = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const message = data?.error || `Request failed (status ${res.status}).`;
+    throw new Error(message);
+  }
+
+  return data;
+}

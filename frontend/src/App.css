@@ -4,12 +4,33 @@
   padding: 1.5rem;
 }
 
+.nav-bar {
+  display: flex;
+  gap: 1.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #d6d3d1;
+}
+
+.nav-bar a {
+  color: #57534e;
+  text-decoration: none;
+  font-weight: 600;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-bar a.active {
+  color: #0e7490;
+  border-bottom-color: #0e7490;
+}
+
 .lede {
   color: #57534e;
   margin-top: 0;
 }
 
-.rental-price-check-layout {
+.feature-layout {
   display: flex;
   gap: 1.5rem;
   flex-wrap: wrap;
@@ -17,7 +38,7 @@
 }
 
 .rental-form,
-.rental-price-check-layout > .status-card {
+.feature-layout > .status-card {
   flex: 1 1 320px;
 }
 
@@ -186,4 +207,57 @@
 .comparison-above {
   background: #fee2e2;
   color: #991b1b;
+}
+
+/* Suburb Finder */
+
+.suburb-ranking {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.suburb-ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #e7e5e4;
+  border-radius: 4px;
+}
+
+.suburb-ranking-rank {
+  font-weight: 700;
+  color: #57534e;
+  min-width: 2rem;
+}
+
+.suburb-ranking-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.suburb-ranking-score {
+  font-variant-numeric: tabular-nums;
+  color: #0e7490;
+  font-weight: 700;
+}
+
+.excluded-list {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: #57534e;
+}
+
+.excluded-list summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.excluded-list ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
 }

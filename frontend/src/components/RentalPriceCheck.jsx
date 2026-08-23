@@ -83,7 +83,7 @@ function RentalPriceCheck() {
         optionally compare it against a rent you've been quoted.
       </p>
 
-      <div className="rental-price-check-layout">
+      <div className="feature-layout">
         <RentalPriceCheckForm
           suburbs={suburbs}
           suburbsError={suburbsError}

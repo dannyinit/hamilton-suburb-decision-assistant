@@ -1,10 +1,14 @@
-import RentalPriceCheck from './components/RentalPriceCheck';
+import { Outlet } from 'react-router-dom';
+import NavBar from './components/NavBar';
 import './App.css';
 
+// Layout route: NavBar is always visible, the active feature renders into
+// <Outlet /> below it. See main.jsx for the route definitions.
 function App() {
   return (
     <div className="app">
-      <RentalPriceCheck />
+      <NavBar />
+      <Outlet />
     </div>
   );
 }
