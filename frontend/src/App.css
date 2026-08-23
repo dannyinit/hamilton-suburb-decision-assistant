@@ -221,12 +221,21 @@
 }
 
 .suburb-ranking-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   padding: 0.6rem 0.8rem;
   border: 1px solid #e7e5e4;
   border-radius: 4px;
+}
+
+.suburb-ranking-item summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.suburb-ranking-item summary::-webkit-details-marker {
+  display: none;
 }
 
 .suburb-ranking-rank {
@@ -244,6 +253,64 @@
   font-variant-numeric: tabular-nums;
   color: #0e7490;
   font-weight: 700;
+}
+
+.suburb-ranking-chevron {
+  color: #a8a29e;
+  transition: transform 0.15s ease;
+}
+
+.suburb-ranking-item[open] .suburb-ranking-chevron {
+  transform: rotate(90deg);
+}
+
+/* Per-criterion breakdown, revealed by expanding a ranking row. */
+
+.score-breakdown {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e7e5e4;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.score-breakdown th,
+.score-breakdown td {
+  text-align: left;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  font-weight: 400;
+}
+
+.score-breakdown th {
+  color: #57534e;
+  white-space: nowrap;
+}
+
+.score-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.score-meter-track {
+  width: 80px;
+  height: 8px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  overflow: hidden;
+}
+
+.score-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #0e7490;
+}
+
+.score-meter-value {
+  font-variant-numeric: tabular-nums;
+  color: #1c1917;
+  min-width: 3.5em;
 }
 
 .excluded-list {
