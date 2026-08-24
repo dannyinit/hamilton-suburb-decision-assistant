@@ -57,7 +57,15 @@ export async function getRentalPriceCheck(params) {
 // `destination`: omitting the key entirely means "no destination" (distance
 // excluded from scoring), which is different from sending an empty or
 // unrecognised value (both rejected with 400 by the backend).
-export async function getSuburbFinder(params) {
+//
+// Optional `{ signal }` (an AbortController's signal) lets a caller cancel
+// this request — used by the weight sliders' live re-ranking, where a new
+// drag position should supersede a still-in-flight request for an older
+// one rather than let both resolve and risk the older one winning the
+// race. An aborted request rejects with an AbortError, which callers can
+// check for (`err.name === 'AbortError'`) and treat as "superseded", not
+// a real failure.
+export async function getSuburbFinder(params, { signal } = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') {
@@ -65,7 +73,7 @@ export async function getSuburbFinder(params) {
     }
   }
 
-  const res = await fetch(`${API_BASE}/suburb-finder?${query}`);
+  const res = await fetch(`${API_BASE}/suburb-finder?${query}`, { signal });
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
