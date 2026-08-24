@@ -1,6 +1,6 @@
 import { DESTINATIONS } from '../suburbFinderOptions';
 
-function SuburbFinderForm({ values, onChange, onSubmit, submitting }) {
+function SuburbFinderForm({ values, onChange, onSubmit, submitting, liveRanking, onLiveRankingChange }) {
   function handleFieldChange(field) {
     return (e) => onChange({ ...values, [field]: e.target.value });
   }
@@ -40,6 +40,25 @@ function SuburbFinderForm({ values, onChange, onSubmit, submitting }) {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="field">
+        <label className="field-checkbox">
+          <input
+            type="checkbox"
+            checked={liveRanking}
+            onChange={(e) => onLiveRankingChange(e.target.checked)}
+          />
+          Live ranking
+        </label>
+        <div className="field-hint-stack">
+          <p className={`field-hint${liveRanking ? '' : ' is-hidden'}`}>
+            Sliders and destination update the ranking as you change them.
+          </p>
+          <p className={`field-hint${liveRanking ? ' is-hidden' : ''}`}>
+            Only "Find suburbs" applies changes now.
+          </p>
+        </div>
       </div>
 
       <div className="field">

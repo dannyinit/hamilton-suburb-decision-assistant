@@ -91,6 +91,21 @@
   margin: 0;
 }
 
+/* Stacks two possible hint messages in the same grid cell so the taller
+   one sets the container's height regardless of which is shown — no
+   guessing a line count, so it holds at any width, not just today's. */
+.field-hint-stack {
+  display: grid;
+}
+
+.field-hint-stack .field-hint {
+  grid-area: 1 / 1;
+}
+
+.field-hint-stack .field-hint.is-hidden {
+  visibility: hidden;
+}
+
 /* Range inputs shouldn't get the boxed text-input treatment above — a
    native range track doesn't read as a field inside a padded border. */
 .field input[type='range'] {

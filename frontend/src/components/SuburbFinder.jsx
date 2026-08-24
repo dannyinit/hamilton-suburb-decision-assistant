@@ -46,6 +46,12 @@ function SuburbFinder() {
   // list the way `status` briefly did in Step 2. See runLiveRefresh below.
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // The "Live ranking" checkbox — on by default, preserving prior
+  // behaviour. Purely a client-side behaviour toggle, never sent to the
+  // backend (buildRequestParams doesn't touch it), so it isn't part of
+  // `values`.
+  const [liveRanking, setLiveRanking] = useState(true);
+
   // Cancels a still-in-flight request when a newer one starts — shared by
   // both search paths below, so an explicit submit and a live refresh
   // correctly cancel each other too, not just requests of their own kind.
@@ -150,10 +156,34 @@ function SuburbFinder() {
   const valuesRef = useRef(values);
   valuesRef.current = values;
 
+  // Read the same way, for the same reason again: the "Live ranking"
+  // checkbox toggling on its own is handled by its own effect below, not
+  // this one — if `liveRanking` were a real dependency here, turning it on
+  // would fire this effect too, redundant with (and racing) the dedicated
+  // one.
+  const liveRankingRef = useRef(liveRanking);
+  liveRankingRef.current = liveRanking;
+
   useEffect(() => {
     if (statusRef.current !== 'success') return;
+    if (!liveRankingRef.current) return;
     throttledRefreshRef.current(valuesRef.current);
   }, [values.rent_weight, values.transport_weight, values.distance_weight, values.destination]);
+
+  // Re-checking "Live ranking" immediately re-ranks using whatever
+  // slider/destination values are currently set, rather than waiting for
+  // the next interaction — otherwise the checkbox would read "on" while
+  // the display stayed stale from whatever changed while it was off,
+  // actively contradicting what it claims. Reuses the same throttled call
+  // as the effect above (not a raw runLiveRefresh call): a checkbox click
+  // is a one-off, not a rapid burst, so the throttle's leading edge fires
+  // it immediately anyway, and every live-refresh trigger goes through the
+  // one call site this way.
+  useEffect(() => {
+    if (!liveRanking) return;
+    if (statusRef.current !== 'success') return;
+    throttledRefreshRef.current(valuesRef.current);
+  }, [liveRanking]);
 
   useEffect(() => {
     return () => {
@@ -182,6 +212,8 @@ function SuburbFinder() {
           onChange={setValues}
           onSubmit={handleSubmit}
           submitting={status === 'loading'}
+          liveRanking={liveRanking}
+          onLiveRankingChange={setLiveRanking}
         />
         <SuburbFinderResults
           status={status}
