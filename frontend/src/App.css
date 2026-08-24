@@ -152,6 +152,14 @@
   border-color: #dc2626;
 }
 
+/* A live re-rank in flight (slider/destination change) — the previous
+   results stay fully in place and interactive, just dimmed slightly,
+   rather than being replaced by a loading state. */
+.status-card.is-refreshing {
+  opacity: 0.6;
+  transition: opacity 150ms ease;
+}
+
 .status-card pre {
   background: #f5f5f4;
   padding: 0.75rem;

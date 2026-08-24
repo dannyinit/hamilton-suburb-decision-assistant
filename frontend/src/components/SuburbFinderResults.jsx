@@ -82,7 +82,7 @@ function ExcludedList({ excluded }) {
   );
 }
 
-function SuburbFinderResults({ status, data, errorMessage }) {
+function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
   if (status === 'idle') {
     return (
       <div className="status-card">
@@ -108,7 +108,7 @@ function SuburbFinderResults({ status, data, errorMessage }) {
 
   if (data.no_suburbs_in_budget) {
     return (
-      <div className="status-card">
+      <div className={`status-card${isRefreshing ? ' is-refreshing' : ''}`}>
         <p>{data.message}</p>
         <ExcludedList excluded={data.excluded} />
       </div>
@@ -116,7 +116,7 @@ function SuburbFinderResults({ status, data, errorMessage }) {
   }
 
   return (
-    <div className="status-card ok result-card">
+    <div className={`status-card ok result-card${isRefreshing ? ' is-refreshing' : ''}`}>
       {data.distance_excluded && (
         <div className="banner banner-info">{data.distance_excluded_note}</div>
       )}

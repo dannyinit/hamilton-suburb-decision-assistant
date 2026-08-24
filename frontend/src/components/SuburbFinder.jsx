@@ -17,9 +17,9 @@ const INITIAL_VALUES = {
   distance_weight: '5',
 };
 
-// How often a slider drag is allowed to trigger a re-rank. Fast enough to
-// read as live, slow enough to keep request volume sane even across a
-// multi-second continuous drag.
+// How often a slider drag (or a destination change) is allowed to trigger
+// a re-rank. Fast enough to read as live, slow enough to keep request
+// volume sane even across a multi-second continuous drag.
 const LIVE_REFRESH_THROTTLE_MS = 200;
 
 // distance_weight is only meaningful with a destination — the backend
@@ -41,16 +41,25 @@ function SuburbFinder() {
   const [result, setResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  // Cancels a still-in-flight request when a newer one starts, so a slow
-  // response to an old slider position can never resolve after — and
-  // overwrite — a faster response to a newer one.
+  // Set only by live re-ranks (sliders/destination), never by the explicit
+  // submit — orthogonal to `status`, so a live refresh never blanks the
+  // list the way `status` briefly did in Step 2. See runLiveRefresh below.
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Cancels a still-in-flight request when a newer one starts — shared by
+  // both search paths below, so an explicit submit and a live refresh
+  // correctly cancel each other too, not just requests of their own kind.
+  // Guarantees a slow response to an old request can never resolve after —
+  // and overwrite — a faster response to a newer one.
   const abortControllerRef = useRef(null);
 
-  // Step 2 still reuses the existing status/loading state for every
-  // search, including slider-triggered ones — dragging will visibly reset
-  // the list for now. That's this step's known, called-out limitation:
-  // isolating "is the fetch/throttle/cancel logic correct" from "does it
-  // look good" (Step 3 removes the flash without touching this function).
+  async function fetchResults(requestValues, signal) {
+    return getSuburbFinder(buildRequestParams(requestValues), { signal });
+  }
+
+  // The explicit "Find suburbs" path — sets the full status lifecycle,
+  // same as before Step 2. Never throttled: a button press should act on
+  // immediately, not wait out a throttle window meant for rapid dragging.
   async function runSearch(requestValues) {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -59,9 +68,7 @@ function SuburbFinder() {
     setStatus('loading');
     setErrorMessage(null);
     try {
-      const data = await getSuburbFinder(buildRequestParams(requestValues), {
-        signal: controller.signal,
-      });
+      const data = await fetchResults(requestValues, controller.signal);
       setResult(data);
       setStatus('success');
     } catch (err) {
@@ -71,42 +78,82 @@ function SuburbFinder() {
     }
   }
 
-  // Created once and reused across renders — a throttle recreated every
-  // render would lose its internal "last called" timing on every render,
-  // making it a no-op. Safe to capture this render's runSearch forever:
-  // runSearch's behaviour never actually varies between renders (it takes
-  // the values to search for as a parameter, and otherwise only touches
-  // stable setState functions and the stable abortControllerRef).
-  const throttledRefreshRef = useRef(null);
-  if (!throttledRefreshRef.current) {
-    throttledRefreshRef.current = throttle(runSearch, LIVE_REFRESH_THROTTLE_MS);
+  // The slider/destination-triggered path — the Step 3 change. Never
+  // touches `status` or clears `result`: the list stays exactly as it was
+  // until the new data actually arrives, so nothing flashes or blanks
+  // mid-drag. A failure here is swallowed (logged, not surfaced) rather
+  // than replacing valid results with an error card over a background
+  // refresh the user didn't explicitly ask to see the outcome of.
+  async function runLiveRefresh(requestValues) {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsRefreshing(true);
+    try {
+      const data = await fetchResults(requestValues, controller.signal);
+      setResult(data);
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Live re-rank failed, keeping previous results:', err);
+      }
+    } finally {
+      // Only clear isRefreshing if this call is still the most recent one.
+      // If a newer call superseded this one, abortControllerRef.current
+      // now points at *its* controller, not this call's — clearing the
+      // flag here would be premature, flickering it off while the newer
+      // call (which will clear it correctly itself when it finishes) is
+      // still genuinely in flight.
+      if (abortControllerRef.current === controller) {
+        setIsRefreshing(false);
+      }
+    }
   }
 
-  // Both read inside the weight-watching effect below without being listed
-  // as its dependencies — deliberately, not an oversight. Refs are updated
-  // every render (the accepted exception to "don't mutate during render"),
-  // so a read always sees the latest value, and — because the linter can't
-  // see through `.current` — neither read forces the effect to re-fire
-  // just because status or values changed for an unrelated reason:
-  //   - statusRef: if `status` were a real dependency, this effect would
-  //     also re-fire the moment handleSubmit's own explicit, unthrottled
-  //     search flips status from 'loading' to 'success' — nothing about
-  //     the weights changed, only status did — racing a redundant
-  //     throttled call against the explicit one already in flight.
-  //   - valuesRef: the effect needs the *current* budget/destination
-  //     alongside whichever weight just changed, but must not re-fire
-  //     when budget/destination change on their own (only sliders should
-  //     trigger a live refresh — see the earlier design proposal).
+  // Created once and reused across renders — a throttle recreated every
+  // render would lose its internal "last called" timing on every render,
+  // making it a no-op. Safe to capture this render's runLiveRefresh
+  // forever: its behaviour never actually varies between renders (it
+  // takes the values to search for as a parameter, and otherwise only
+  // touches stable setState functions and the stable abortControllerRef).
+  const throttledRefreshRef = useRef(null);
+  if (!throttledRefreshRef.current) {
+    throttledRefreshRef.current = throttle(runLiveRefresh, LIVE_REFRESH_THROTTLE_MS);
+  }
+
+  // Read inside the trigger effect below without being listed as its
+  // dependency — deliberately, not an oversight. Refs are updated every
+  // render (the accepted exception to "don't mutate during render"), so a
+  // read always sees the latest value, and — because the linter can't see
+  // through `.current` — this read doesn't force the effect to re-fire
+  // just because `status` changed for an unrelated reason: if `status`
+  // were a real dependency, this effect would also re-fire the moment
+  // handleSubmit's own explicit search changes it, racing a redundant
+  // throttled call against the explicit one already in flight.
+  //
+  // Guards on `=== 'success'` specifically, not just "not idle": a live
+  // refresh has no valid prior result to refresh while idle (nothing
+  // submitted yet), loading (an explicit search is already in flight —
+  // the shared AbortController already handles a slider change arriving
+  // mid-search), or error (no successful result is currently shown, and
+  // status staying 'error' would otherwise leave the error card up even
+  // after a live refresh quietly succeeded in the background).
   const statusRef = useRef(status);
   statusRef.current = status;
 
+  // Read the same way, for the same reason, but for a different field:
+  // the effect needs the *current* budget alongside whichever field
+  // actually changed, without re-firing when budget changes on its own —
+  // budget can change *which* suburbs survive the hard constraints, not
+  // just how the survivors are scored, so it stays a deliberate,
+  // explicit-submit-only action, unlike destination and the weights.
   const valuesRef = useRef(values);
   valuesRef.current = values;
 
   useEffect(() => {
-    if (statusRef.current === 'idle') return; // nothing to refresh yet
+    if (statusRef.current !== 'success') return;
     throttledRefreshRef.current(valuesRef.current);
-  }, [values.rent_weight, values.transport_weight, values.distance_weight]);
+  }, [values.rent_weight, values.transport_weight, values.distance_weight, values.destination]);
 
   useEffect(() => {
     return () => {
@@ -124,9 +171,9 @@ function SuburbFinder() {
     <section className="suburb-finder">
       <h1>Suburb Finder</h1>
       <p className="lede">
-        Enter your weekly budget and, optionally, a destination you'd like to be
-        close to. Use the sliders to set how much rent, transport access, and
-        distance matter to you, then press "Find suburbs" to rank them.
+        Enter your weekly budget and press "Find suburbs" to get started. Once
+        you have results, adjusting the sliders or destination updates the
+        ranking live — budget changes still need "Find suburbs" pressed again.
       </p>
 
       <div className="feature-layout">
@@ -136,7 +183,12 @@ function SuburbFinder() {
           onSubmit={handleSubmit}
           submitting={status === 'loading'}
         />
-        <SuburbFinderResults status={status} data={result} errorMessage={errorMessage} />
+        <SuburbFinderResults
+          status={status}
+          data={result}
+          errorMessage={errorMessage}
+          isRefreshing={isRefreshing}
+        />
       </div>
     </section>
   );
