@@ -350,6 +350,13 @@
 }
 
 .score-meter-fill {
+  /* A <span> is display: inline by default, and CSS width has no effect
+     on inline elements — the width/height below were silently no-ops,
+     rendering as an invisible 0×0 box regardless of score. .score-meter
+     -track escapes this because it's a direct child of .score-meter's
+     flex container (flex items are auto-blockified) — this element isn't,
+     so it needs its own explicit override. */
+  display: block;
   height: 100%;
   border-radius: 999px;
   background: #0e7490;
