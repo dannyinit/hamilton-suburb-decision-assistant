@@ -30,7 +30,7 @@ function RentalPriceCheckForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rental-form">
+    <form onSubmit={handleSubmit} className="form-card">
       <div className="field">
         <label htmlFor="sa2_code">Suburb</label>
         <select
@@ -93,7 +93,7 @@ function RentalPriceCheckForm({
       </div>
 
       <div className="field">
-        <label htmlFor="rent">Your weekly rent (optional)</label>
+        <label htmlFor="rent">Your weekly rent ($, optional)</label>
         <input
           id="rent"
           type="number"

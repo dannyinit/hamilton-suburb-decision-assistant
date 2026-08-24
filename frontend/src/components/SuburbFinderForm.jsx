@@ -11,7 +11,7 @@ function SuburbFinderForm({ values, onChange, onSubmit, submitting, liveRanking,
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rental-form">
+    <form onSubmit={handleSubmit} className="form-card">
       <div className="field">
         <label htmlFor="budget">Weekly budget ($)</label>
         <input
