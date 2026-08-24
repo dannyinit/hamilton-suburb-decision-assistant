@@ -79,6 +79,31 @@
   margin: 0;
 }
 
+.field-value {
+  font-weight: 400;
+  color: #57534e;
+  margin-left: 0.35rem;
+}
+
+.field-hint {
+  color: #78716c;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* Range inputs shouldn't get the boxed text-input treatment above — a
+   native range track doesn't read as a field inside a padded border. */
+.field input[type='range'] {
+  width: 100%;
+  padding: 0;
+  border: none;
+  accent-color: #0e7490;
+}
+
+.field input[type='range']:disabled {
+  accent-color: #a8a29e;
+}
+
 .field-checkbox {
   display: flex;
   align-items: center;
