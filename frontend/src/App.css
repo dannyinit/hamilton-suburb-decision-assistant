@@ -1,5 +1,11 @@
 .app {
-  max-width: 800px;
+  /* Was 800px, dating back to the single-column health-check scaffold
+     before the two-column form/results layout existed — never revisited
+     once .feature-layout arrived, leaving a lot of unused space on wider
+     screens for content (the ranked list, score-breakdown tables) that
+     actively benefits from more room. 1200px is a conventional "wide
+     container" cap, not narrowly tuned to one label. */
+  max-width: 1200px;
   margin: 3rem auto;
   padding: 1.5rem;
 }
@@ -40,6 +46,22 @@
 .form-card,
 .feature-layout > .status-card {
   flex: 1 1 320px;
+  /* Flex items default to min-width: auto, meaning they can never shrink
+     below their own content's minimum width no matter what flex-basis
+     says — if content inside ever needs more than its fair share (e.g. a
+     long unbreakable string), the item stops shrinking and flex-wrap
+     kicks in, breaking the two-column layout instead of just wrapping
+     that content internally. Overriding to 0 lets width actually be
+     governed by flex-basis as intended. */
+  min-width: 0;
+}
+
+/* The results panel's content (ranked list, score-breakdown tables)
+   benefits from extra width more than the form's simple fields do — give
+   it twice the form's share of any leftover space once both have met
+   their basis, rather than splitting it evenly. */
+.feature-layout > .status-card {
+  flex-grow: 2;
 }
 
 /* Form */
@@ -332,7 +354,12 @@
 
 .score-breakdown th {
   color: #57534e;
-  white-space: nowrap;
+  /* No nowrap: fine for a short fixed word like "Rent", but the distance
+     row's label now names the destination ("Distance to University of
+     Waikato") and can be long — forcing it onto one line inflates the
+     table's column width enough to break the two-column page layout (see
+     the min-width: 0 fix above). Wrapping here is the better outcome
+     anyway: a two-line label in a narrow column, not a wider column. */
 }
 
 .score-meter {

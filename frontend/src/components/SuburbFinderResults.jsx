@@ -21,11 +21,21 @@ function formatBusStops(count) {
 // backend/README.md's optional-destination section), so filtering on
 // `breakdown[key]` below handles that for free — no separate
 // distance_excluded check needed here, unlike the banner above the list.
-const CRITERIA = [
-  { key: 'rent', label: 'Rent', formatValue: (v) => `$${v}/week` },
-  { key: 'transport', label: 'Transport', formatValue: formatBusStops },
-  { key: 'distance', label: 'Distance', formatValue: formatDistance },
-];
+//
+// A function rather than a static array: the distance row's label names
+// the actual selected destination (e.g. "Distance to The Base"), which can
+// change — and live-updates the ranking — so a generic "Distance" label
+// would go stale-looking the moment a user picks a different one.
+// `destination` is only read for that one row; by the time it's rendered
+// at all (see the .filter() in ScoreBreakdown below) it's guaranteed
+// non-null, since the row itself doesn't exist without one.
+function getCriteria(destination) {
+  return [
+    { key: 'rent', label: 'Rent', formatValue: (v) => `$${v}/week` },
+    { key: 'transport', label: 'Transport', formatValue: formatBusStops },
+    { key: 'distance', label: `Distance to ${destination}`, formatValue: formatDistance },
+  ];
+}
 
 // Fill = the app's existing accent teal, track = its existing light banner
 // blue (same family, both already used elsewhere in App.css) — a single
@@ -46,11 +56,12 @@ function ScoreMeter({ score }) {
   );
 }
 
-function ScoreBreakdown({ breakdown }) {
+function ScoreBreakdown({ breakdown, destination }) {
+  const criteria = getCriteria(destination);
   return (
     <table className="score-breakdown">
       <tbody>
-        {CRITERIA.filter((criterion) => breakdown[criterion.key]).map((criterion) => {
+        {criteria.filter((criterion) => breakdown[criterion.key]).map((criterion) => {
           const { value, normalised_score } = breakdown[criterion.key];
           return (
             <tr key={criterion.key}>
@@ -131,7 +142,7 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
                 <span className="suburb-ranking-score">{result.overall_score.toFixed(3)}</span>
                 <span className="suburb-ranking-chevron" aria-hidden="true">▸</span>
               </summary>
-              <ScoreBreakdown breakdown={result.score_breakdown} />
+              <ScoreBreakdown breakdown={result.score_breakdown} destination={data.destination} />
             </details>
           </li>
         ))}
