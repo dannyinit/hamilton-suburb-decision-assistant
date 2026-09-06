@@ -40,7 +40,7 @@ function formatBusStops(count) {
 // non-null, since the row itself doesn't exist without one.
 function getCriteria(destination) {
   return [
-    { key: 'rent', label: 'Rent', formatValue: (v) => `$${v}/week` },
+    { key: 'rent', label: 'Median Rent', formatValue: (v) => `$${v}/week` },
     { key: 'transport', label: 'Transport', formatValue: formatBusStops },
     { key: 'distance', label: `Distance to ${destination}`, formatValue: formatDistance },
   ];
@@ -102,7 +102,7 @@ function LowestRent({ lowestRent }) {
   return (
     <div className="lowest-rent">
       <p className="lowest-rent-line">
-        Lowest available: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
+        Cheapest option found: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
       </p>
       {low_sample_warning && <div className="banner banner-warning">{low_sample_note}</div>}
     </div>
@@ -164,6 +164,17 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
       {data.distance_excluded && (
         <div className="banner banner-info">{data.distance_excluded_note}</div>
       )}
+
+      {/* Shown once, not per suburb — the distinction is identical for
+          every row, so repeating it 60 times would just be noise, and a
+          reader only needs it explained the first time. Plain caption
+          text, not .banner-info: that style is for something notable
+          about *this* search (like distance_excluded); this is a fixed
+          fact about how to read the list, always true regardless of
+          search. */}
+      <p className="suburb-ranking-legend">
+        Each suburb below shows two rent figures: Median Rent (used to rank suburbs) and Cheapest option found (a specific dwelling type that fits your budget, used only to decide whether to include the suburb — not a second rank-worthy estimate).
+      </p>
 
       <ol className="suburb-ranking">
         {data.results.map((result) => (
