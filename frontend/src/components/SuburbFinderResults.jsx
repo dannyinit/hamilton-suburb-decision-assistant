@@ -1,6 +1,15 @@
+// number_of_beds is 'ALL', a specific count ('1', '5+'), or null (a
+// distinct MBIE category, not a duplicate of 'ALL' — see
+// backend/README.md) — 'ALL' and null both just mean "no specific bed
+// count to name", so both fall through to showing the dwelling type alone.
+function formatDwellingType(dwellingType, numberOfBeds) {
+  if (!numberOfBeds || numberOfBeds === 'ALL') return dwellingType;
+  return `${dwellingType}, ${numberOfBeds} bed${numberOfBeds === '1' ? '' : 's'}`;
+}
+
 const EXCLUSION_LABEL = {
   insufficient_data: (item) => `insufficient data (${item.data_status})`,
-  exceeds_budget: (item) => `exceeds budget ($${item.median_rent}/week)`,
+  exceeds_budget: (item) => `exceeds budget (cheapest found: $${item.lowest_rent.value}/week, ${formatDwellingType(item.lowest_rent.dwelling_type, item.lowest_rent.number_of_beds)})`,
 };
 
 // <1000m -> whole metres; >=1000m -> km to 1 decimal. Real suburb-destination
@@ -76,6 +85,30 @@ function ScoreBreakdown({ breakdown, destination }) {
   );
 }
 
+// The budget hard-constraint is checked against this figure (the cheapest
+// specific dwelling_type/beds row for the suburb), not the median_rent
+// shown in ScoreBreakdown — see backend/README.md's "lowest_rent" section
+// for why they're deliberately different numbers serving different jobs.
+// No minimum sample size excludes a suburb here, so total_bonds is always
+// shown (not just when small) for full transparency; low_sample_warning
+// (from the same total_bonds, at or below MBIE's own minimum publishable
+// sample size) additionally gets a banner when true. Amber, not the more
+// severe red: with this single threshold the warning fires for most
+// suburbs (50/60 at the time this was tuned), so a "be alarmed" tone
+// would just be alarm fatigue, not a useful signal.
+function LowestRent({ lowestRent }) {
+  const { value, dwelling_type, number_of_beds, total_bonds, low_sample_warning, low_sample_note } = lowestRent;
+
+  return (
+    <div className="lowest-rent">
+      <p className="lowest-rent-line">
+        Lowest available: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
+      </p>
+      {low_sample_warning && <div className="banner banner-warning">{low_sample_note}</div>}
+    </div>
+  );
+}
+
 function ExcludedList({ excluded }) {
   if (excluded.length === 0) return null;
 
@@ -143,6 +176,7 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
                 <span className="suburb-ranking-chevron" aria-hidden="true">▸</span>
               </summary>
               <ScoreBreakdown breakdown={result.score_breakdown} destination={data.destination} />
+              <LowestRent lowestRent={result.lowest_rent} />
             </details>
           </li>
         ))}

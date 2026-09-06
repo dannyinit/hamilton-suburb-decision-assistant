@@ -51,26 +51,80 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
   });
 }
 
+// Single binary "trust this figure less" warning for lowest_rent, based
+// purely on the sample size (total_bonds) of whichever specific
+// dwelling_type/number_of_beds row it came from. Informational only, not
+// an eligibility gate — every suburb's cheapest specific row counts
+// regardless of how small its sample is, per the design decision that
+// hard-constraint filtering should err towards inclusion (scoring, below,
+// is unaffected by this and still uses the far more stable ALL/ALL
+// median_rent).
+//
+// Threshold is MBIE's own minimum publishable sample size (6 — anything
+// smaller and they suppress the row entirely), not an arbitrary cutoff.
+// A two-tier version (mild/strong at <20/<10) was tried first, but across
+// all 60 CURRENT suburbs the lowest_rent total_bonds values are only ever
+// 6, 9, 12, or 15 — so any tier boundary above 15 warns 100% of suburbs,
+// and no boundary produces a materially different split from this one.
+// <=6 is the only split point the real data actually supports (50/60
+// suburbs sit exactly at the floor; the other 10 clear it).
+const LOW_SAMPLE_THRESHOLD = 6;
+
+function lowestRentWarning(totalBonds) {
+  const isLowSample = totalBonds <= LOW_SAMPLE_THRESHOLD;
+  return {
+    isLowSample,
+    note: isLowSample
+      ? `This figure is based on a very small sample (${totalBonds} bonds — MBIE's own minimum reportable size) — treat it as a rough indication only.`
+      : null,
+  };
+}
+
 // One row per suburb for the chosen destination: data status (for the
 // insufficient_data hard constraint), the ALL/ALL median rent (for the
-// budget hard constraint and rent criterion), bus stop count (transport
-// criterion), and distance to the chosen destination (distance criterion).
-// suburb_bus_access and suburb_destination_distance have complete coverage
-// (62 rows / 62x4 rows respectively) so plain JOINs are safe; rent is
-// LEFT JOINed since NO_DATA suburbs genuinely have no ALL/ALL row.
+// rent scoring criterion only — NOT the budget check, see `cheapest`
+// below), bus stop count (transport criterion), and distance to the
+// chosen destination (distance criterion). suburb_bus_access and
+// suburb_destination_distance have complete coverage (62 rows / 62x4 rows
+// respectively) so plain JOINs are safe; rent is LEFT JOINed since
+// NO_DATA suburbs genuinely have no ALL/ALL row.
+//
+// `cheapest` finds, per suburb, the single specific (dwelling_type !=
+// 'ALL') row with the lowest median_rent — this is what the budget hard
+// constraint actually compares against, so a suburb where e.g. Rooms are
+// genuinely affordable isn't excluded just because its House-dominated
+// overall median looks expensive. No minimum sample size is required
+// (see lowestRentWarning above for why) and every CURRENT suburb has at
+// least a House row, so this is never null for a row that reaches the
+// budget check.
+const CHEAPEST_SPECIFIC_ROW_CTE = `
+  WITH cheapest AS (
+    SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds,
+           ROW_NUMBER() OVER (PARTITION BY sa2_code ORDER BY median_rent ASC) AS rn
+    FROM rent
+    WHERE dwelling_type != 'ALL' AND median_rent IS NOT NULL
+  )
+`;
+
 const findCandidatesStmt = db.prepare(`
+  ${CHEAPEST_SPECIFIC_ROW_CTE}
   SELECT
     s.sa2_code,
     s.sa2_name,
     sds.data_status,
     r.median_rent,
     sba.bus_stop_count_500m AS bus_stop_count,
-    sdd.distance_m
+    sdd.distance_m,
+    c.dwelling_type AS lowest_dwelling_type,
+    c.number_of_beds AS lowest_number_of_beds,
+    c.median_rent AS lowest_rent,
+    c.total_bonds AS lowest_rent_total_bonds
   FROM suburbs s
   JOIN suburb_data_status sds ON sds.sa2_code = s.sa2_code
   LEFT JOIN rent r ON r.sa2_code = s.sa2_code AND r.dwelling_type = 'ALL' AND r.number_of_beds = 'ALL'
   JOIN suburb_bus_access sba ON sba.sa2_code = s.sa2_code
   JOIN suburb_destination_distance sdd ON sdd.sa2_code = s.sa2_code AND sdd.destination_id = ?
+  LEFT JOIN cheapest c ON c.sa2_code = s.sa2_code AND c.rn = 1
   ORDER BY s.sa2_code
 `);
 
@@ -78,16 +132,22 @@ const findCandidatesStmt = db.prepare(`
 // when destination is omitted and distance isn't being scored at all —
 // no point joining a table whose data won't be used.
 const findCandidatesNoDestinationStmt = db.prepare(`
+  ${CHEAPEST_SPECIFIC_ROW_CTE}
   SELECT
     s.sa2_code,
     s.sa2_name,
     sds.data_status,
     r.median_rent,
-    sba.bus_stop_count_500m AS bus_stop_count
+    sba.bus_stop_count_500m AS bus_stop_count,
+    c.dwelling_type AS lowest_dwelling_type,
+    c.number_of_beds AS lowest_number_of_beds,
+    c.median_rent AS lowest_rent,
+    c.total_bonds AS lowest_rent_total_bonds
   FROM suburbs s
   JOIN suburb_data_status sds ON sds.sa2_code = s.sa2_code
   LEFT JOIN rent r ON r.sa2_code = s.sa2_code AND r.dwelling_type = 'ALL' AND r.number_of_beds = 'ALL'
   JOIN suburb_bus_access sba ON sba.sa2_code = s.sa2_code
+  LEFT JOIN cheapest c ON c.sa2_code = s.sa2_code AND c.rn = 1
   ORDER BY s.sa2_code
 `);
 
@@ -196,7 +256,10 @@ function computeSuburbFinder(query) {
   // Hard constraints, in order: data quality first, then budget — so a
   // suburb never carries both an insufficient_data and an exceeds_budget
   // reason at once (per data-pipeline/README.md's documented ordering).
-  // Unaffected by destination — neither check reads distance_m.
+  // Unaffected by destination — neither check reads distance_m. The budget
+  // check compares against `lowest_rent` (the cheapest specific dwelling
+  // type/beds row for that suburb), not the ALL/ALL median — see the
+  // `cheapest` CTE above for why.
   const excluded = [];
   const included = [];
 
@@ -211,12 +274,22 @@ function computeSuburbFinder(query) {
       continue;
     }
 
-    if (row.median_rent > budget) {
+    const { isLowSample, note } = lowestRentWarning(row.lowest_rent_total_bonds);
+    const lowestRent = {
+      value: row.lowest_rent,
+      dwelling_type: row.lowest_dwelling_type,
+      number_of_beds: row.lowest_number_of_beds,
+      total_bonds: row.lowest_rent_total_bonds,
+      low_sample_warning: isLowSample,
+      low_sample_note: note,
+    };
+
+    if (row.lowest_rent > budget) {
       excluded.push({
         sa2_code: row.sa2_code,
         sa2_name: row.sa2_name,
         reason: 'exceeds_budget',
-        median_rent: row.median_rent,
+        lowest_rent: lowestRent,
       });
       continue;
     }
@@ -226,6 +299,7 @@ function computeSuburbFinder(query) {
       sa2_name: row.sa2_name,
       median_rent: row.median_rent,
       bus_stop_count: row.bus_stop_count,
+      lowest_rent: lowestRent,
       ...(hasDestination && { distance_m: row.distance_m }),
     });
   }
@@ -240,7 +314,7 @@ function computeSuburbFinder(query) {
   if (included.length === 0) {
     const cheapestCurrent = candidates
       .filter((row) => row.data_status === 'CURRENT')
-      .reduce((min, row) => (min === null || row.median_rent < min ? row.median_rent : min), null);
+      .reduce((min, row) => (min === null || row.lowest_rent < min ? row.lowest_rent : min), null);
 
     return {
       status: 200,
@@ -307,6 +381,7 @@ function computeSuburbFinder(query) {
           distance: { value: suburb.distance_m, normalised_score: distanceScore },
         }),
       },
+      lowest_rent: suburb.lowest_rent,
     };
   });
 

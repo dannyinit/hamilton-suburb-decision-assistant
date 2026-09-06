@@ -395,6 +395,19 @@
   min-width: 3.5em;
 }
 
+/* Sits directly under .score-breakdown, which already has its own
+   border-top separating it from the summary row — no border here too,
+   or the two separators would sit stacked right on top of each other. */
+.lowest-rent {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.lowest-rent-line {
+  margin: 0 0 0.4rem;
+  color: #44403c;
+}
+
 .excluded-list {
   margin-top: 1rem;
   font-size: 0.85rem;
