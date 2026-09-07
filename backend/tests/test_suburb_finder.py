@@ -83,7 +83,9 @@ check("no destination -> identical excluded set as with destination", no_dest_ex
 
 # N=1 exact tie, no destination: both remaining criteria hit the tie branch,
 # and since the two weights always sum to 1, overall_score is still 0.5.
-code, body = call({"budget": 345})
+# $150 is the N=1 boundary under lowest_rent-based filtering (Hamilton
+# Central's lowest_rent is $125, the next cheapest suburb's is $180).
+code, body = call({"budget": 150})
 r = body["results"]
 check("no destination, N=1 -> exactly 1 result, overall_score 0.5", code == 200 and len(r) == 1 and r[0]["overall_score"] == 0.5, r)
 check("no destination, N=1 -> score_breakdown has no distance key", "distance" not in r[0]["score_breakdown"], r[0]["score_breakdown"])
@@ -101,23 +103,29 @@ code, body = call({"budget": 500, "distance_weight": 5})
 check("no destination, distance_weight supplied anyway -> silently ignored, still 200", code == 200 and set(body["weights_used"].keys()) == {"rent", "transport"}, body["weights_used"])
 
 # --- 3. Empty result set ---
-code, body = call({"budget": 300, "destination": "The Base"})
+# $100 is below the cheapest lowest_rent in the dataset ($125, Hamilton
+# Central) -- lower than the old $300/$340 boundary, since lowest_rent-based
+# filtering is strictly more inclusive than the old median-based filtering.
+code, body = call({"budget": 100, "destination": "The Base"})
 check("empty result set -> 200, results=[], no_suburbs_in_budget", code == 200 and body["results"] == [] and body["no_suburbs_in_budget"] is True, body)
-check("empty result set cheapest hint mentions $340", "$340" in body.get("message", ""), body.get("message"))
+check("empty result set cheapest hint mentions $125", "$125" in body.get("message", ""), body.get("message"))
 
 # --- 4. N=1 exact tie (with destination) ---
-code, body = call({"budget": 345, "destination": "The Base"})
+code, body = call({"budget": 150, "destination": "The Base"})
 r = body["results"]
 check("N=1 -> exactly 1 result, rank 1, overall_score 0.5", code == 200 and len(r) == 1 and r[0]["rank"] == 1 and r[0]["overall_score"] == 0.5, r)
 
 # --- 5. Normal case, cross-checked ---
+# 39 results (not the pre-lowest_rent 10) -- lowest_rent-based filtering
+# admits suburbs whose specific cheapest option fits the budget even though
+# their suburb-wide median_rent doesn't.
 code, body = call({"budget": 500, "destination": "The Base"})
 r = body["results"]
-check("budget=500 -> 10 results", len(r) == 10, len(r))
+check("budget=500 -> 39 results", len(r) == 39, len(r))
 check("budget=500 -> ranked descending by overall_score", all(r[i]["overall_score"] >= r[i+1]["overall_score"] for i in range(len(r)-1)), [x["overall_score"] for x in r])
 check("budget=500 -> Hamilton Central ranks #1 (equal weights)", r[0]["sa2_name"] == "Hamilton Central", r[0])
 hc = next(x for x in r if x["sa2_name"] == "Hamilton Central")
-manual = round((0.625 + 1 + 0.6789) / 3, 4)
+manual = round((0.8537 + 1 + 0.468) / 3, 4)
 check("Hamilton Central overall_score matches manual calc", abs(hc["overall_score"] - manual) < 0.001, (hc["overall_score"], manual))
 
 # --- 6. Full population (very high budget) ---
@@ -171,6 +179,45 @@ included_codes = {x["sa2_code"] for x in body["results"]}
 excluded_codes = {x["sa2_code"] for x in body["excluded"]}
 check("no suburb in both results and excluded", included_codes.isdisjoint(excluded_codes))
 check("results + excluded covers all 62 suburbs", len(included_codes) + len(excluded_codes) == 62, len(included_codes) + len(excluded_codes))
+
+# --- 12. lowest_rent: the smoking-gun test that the budget hard constraint
+# actually uses lowest_rent, not median_rent ---
+# Hamilton Central's suburb-wide median_rent is $400 (would fail a $150
+# budget under the old rule), but its lowest_rent (a Boarding House row) is
+# $125 (passes a $150 budget). If this suburb is included at budget=150,
+# the hard constraint is genuinely reading lowest_rent, not median_rent.
+code, body = call({"budget": 150, "destination": "The Base"})
+r = body["results"]
+check("lowest_rent smoking gun: Hamilton Central included at budget=150 despite median_rent > budget", len(r) == 1 and r[0]["sa2_name"] == "Hamilton Central", r)
+if r:
+    check("lowest_rent smoking gun: median_rent (400) > budget but lowest_rent.value (125) <= budget", r[0]["score_breakdown"]["rent"]["value"] == 400 and r[0]["lowest_rent"]["value"] == 125, r[0])
+
+# --- 13. lowest_rent structure and low_sample_warning correctness ---
+code, body = call({"budget": 10000, "destination": "The Base"})
+r = body["results"]
+ex = body["excluded"]
+check("budget=10000 -> every result has a lowest_rent object with the expected keys", all(
+    set(x["lowest_rent"].keys()) == {"value", "dwelling_type", "number_of_beds", "total_bonds", "low_sample_warning", "low_sample_note"}
+    for x in r
+), [set(x["lowest_rent"].keys()) for x in r[:1]])
+check("budget=10000 -> lowest_rent.value never exceeds the median_rent used for scoring", all(
+    x["lowest_rent"]["value"] <= x["score_breakdown"]["rent"]["value"] for x in r
+), [(x["sa2_name"], x["lowest_rent"]["value"], x["score_breakdown"]["rent"]["value"]) for x in r if x["lowest_rent"]["value"] > x["score_breakdown"]["rent"]["value"]])
+check("budget=10000 -> low_sample_warning true iff total_bonds <= 6, for every result", all(
+    x["lowest_rent"]["low_sample_warning"] == (x["lowest_rent"]["total_bonds"] <= 6) for x in r
+), [(x["sa2_name"], x["lowest_rent"]) for x in r if x["lowest_rent"]["low_sample_warning"] != (x["lowest_rent"]["total_bonds"] <= 6)])
+check("budget=10000 -> low_sample_note is non-empty iff low_sample_warning is true, for every result", all(
+    bool(x["lowest_rent"]["low_sample_note"]) == x["lowest_rent"]["low_sample_warning"] for x in r
+), [(x["sa2_name"], x["lowest_rent"]) for x in r if bool(x["lowest_rent"]["low_sample_note"]) != x["lowest_rent"]["low_sample_warning"]])
+warned = sum(1 for x in r if x["lowest_rent"]["low_sample_warning"])
+check("budget=10000 -> 50/60 suburbs carry low_sample_warning (the only meaningful split the real data supports)", warned == 50, warned)
+
+# budget=10000 has no exceeds_budget exclusions at all (see section 6) --
+# need a tighter budget to check that reason's excluded entries also carry
+# a lowest_rent object.
+code, body = call({"budget": 500, "destination": "The Base"})
+exceeds_budget = [e for e in body["excluded"] if e["reason"] == "exceeds_budget"]
+check("budget=500 -> exceeds_budget-excluded entries also carry a lowest_rent object", len(exceeds_budget) > 0 and all("lowest_rent" in e and "value" in e["lowest_rent"] for e in exceeds_budget), exceeds_budget[:1])
 
 # --- summary ---
 passed = sum(1 for s, _, _ in results_log if s == "PASS")

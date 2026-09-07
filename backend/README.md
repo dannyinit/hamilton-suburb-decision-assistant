@@ -169,12 +169,42 @@ chosen destination, after applying hard budget/data-quality constraints.
 
 **Hard constraints**, applied in this order so no suburb ever carries both reasons:
 1. `suburb_data_status.data_status != 'CURRENT'` → excluded, reason `insufficient_data`
-2. `median_rent > budget` (the suburb's `dwelling_type='ALL', number_of_beds='ALL'` row) → excluded, reason `exceeds_budget`
+2. `lowest_rent.value > budget` (see "Budget filtering" below) → excluded, reason `exceeds_budget`
 
 If no suburb survives both constraints, the response is `results: []` with
-`no_suburbs_in_budget: true` and a message naming the cheapest available suburb.
-This is unaffected by whether `destination` was provided — neither hard
-constraint reads distance.
+`no_suburbs_in_budget: true` and a message naming the cheapest available suburb
+(by `lowest_rent`, same as the hard constraint above). This is unaffected by
+whether `destination` was provided — neither hard constraint reads distance.
+
+**Budget filtering: `lowest_rent`, not the suburb's overall median.** Comparing
+`budget` against the suburb-wide `dwelling_type='ALL', number_of_beds='ALL'`
+median would wrongly exclude a suburb where a specific dwelling type (e.g. Room)
+is genuinely affordable but House prices pull the suburb-wide median above
+budget. Instead, the budget check uses `lowest_rent`: for each suburb, the
+single specific (`dwelling_type != 'ALL'`) dwelling_type/beds row with the
+lowest `median_rent` — no minimum sample size required, since hard-constraint
+filtering should err towards inclusion rather than excluding a suburb because
+its cheapest option happens to have a small sample. Every `CURRENT` suburb has
+at least a `House` row, so there's no fallback case to handle.
+
+Each suburb's `lowest_rent` object (present on every entry in `results`, and on
+`excluded` entries with `reason: "exceeds_budget"`):
+
+| field | notes |
+|---|---|
+| `value` | the rent figure compared against `budget` |
+| `dwelling_type`, `number_of_beds` | which specific row `value` came from |
+| `total_bonds` | that row's sample size |
+| `low_sample_warning` | `true` when `total_bonds <= 6` — MBIE's own minimum publishable sample size, not an arbitrary cutoff. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` is only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (currently ~50/60 suburbs warned) |
+| `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false` |
+
+**This is deliberately a different figure from the `rent` criterion used for
+scoring** (`score_breakdown.rent`, always the suburb-wide `median_rent`) — the
+budget check needs the most optimistic realistic figure to avoid excluding a
+suburb that might work, while ranking needs a stable, suburb-wide figure so one
+thin sample doesn't distort a suburb's score relative to others. See the
+frontend's `suburb-ranking-legend` copy for how this distinction is explained
+to users, who see both figures next to each other.
 
 **Optional destination:** when `destination` is omitted, the distance
 criterion is excluded from scoring entirely — not assigned a neutral score,
@@ -190,7 +220,9 @@ with no destination, the `400` error message names only those two params, not
 `distance_weight`.
 
 **Scoring**, applied only across the suburbs that survive both hard constraints
-(not all 62 — ranking should reflect relative comparison among viable options):
+(not all 62 — ranking should reflect relative comparison among viable options).
+The rent criterion here is always the suburb-wide `median_rent`, never
+`lowest_rent` — see "Budget filtering" above for why the two are kept separate:
 
 - Each criterion is min-max normalised to `[0,1]`. Rent and distance are cost
   criteria (reversed: lower is better); transport (bus stop count) is a benefit
@@ -220,7 +252,8 @@ with no destination, the `400` error message names only those two params, not
   (Weighted Sum Model). Results are ranked by `overall_score` descending, ties
   broken by `sa2_code` for deterministic ordering.
 
-**Example response** (truncated to one result):
+**Example response** (truncated to one result; at this budget, 39 suburbs are
+included and 23 excluded):
 
 ```json
 {
@@ -232,27 +265,53 @@ with no destination, the `400` error message names only those two params, not
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.768,
+      "overall_score": 0.7739,
       "score_breakdown": {
-        "rent": { "value": 400, "normalised_score": 0.625 },
+        "rent": { "value": 400, "normalised_score": 0.8537 },
         "transport": { "value": 28, "normalised_score": 1 },
-        "distance": { "value": 5982.44, "normalised_score": 0.6789 }
+        "distance": { "value": 5982.44, "normalised_score": 0.468 }
+      },
+      "lowest_rent": {
+        "value": 125,
+        "dwelling_type": "Boarding House",
+        "number_of_beds": null,
+        "total_bonds": 6,
+        "low_sample_warning": true,
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
       }
     }
   ],
   "excluded": [
     { "sa2_code": 175200, "sa2_name": "Te Rapa North", "reason": "insufficient_data", "data_status": "NO_DATA" },
-    { "sa2_code": 175300, "sa2_name": "Flagstaff North", "reason": "exceeds_budget", "median_rent": 750 }
+    {
+      "sa2_code": 175400,
+      "sa2_name": "Rotokauri-Waiwhakareke",
+      "reason": "exceeds_budget",
+      "lowest_rent": {
+        "value": 650,
+        "dwelling_type": "House",
+        "number_of_beds": "ALL",
+        "total_bonds": 6,
+        "low_sample_warning": true,
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+      }
+    }
   ]
 }
 ```
 
+Note `score_breakdown.rent.value` (400, the suburb-wide median, used for
+ranking) and `lowest_rent.value` (125, a specific Boarding House row, used for
+the budget check) are deliberately different figures — see "Budget filtering"
+above.
+
 **Example response, no destination** (same budget, `destination` omitted — note
-the re-normalised `weights_used`, the `distance_excluded` fields, and the
-two-key `score_breakdown`; the ranking and `overall_score` differ from the
-example above because distance no longer factors in. `excluded` is the same 52
-entries as the example above — hard constraints don't depend on destination —
-just truncated here the same way):
+the re-normalised `weights_used`, the two-key `score_breakdown`, and that
+`lowest_rent` is unaffected by destination since it's a hard-constraint concern,
+not a scoring one; the ranking and `overall_score` differ from the example above
+because distance no longer factors in. `excluded` is the same 23 entries as the
+example above — hard constraints don't depend on destination — just truncated
+here the same way):
 
 ```json
 {
@@ -266,16 +325,36 @@ just truncated here the same way):
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.8125,
+      "overall_score": 0.9269,
       "score_breakdown": {
-        "rent": { "value": 400, "normalised_score": 0.625 },
+        "rent": { "value": 400, "normalised_score": 0.8537 },
         "transport": { "value": 28, "normalised_score": 1 }
+      },
+      "lowest_rent": {
+        "value": 125,
+        "dwelling_type": "Boarding House",
+        "number_of_beds": null,
+        "total_bonds": 6,
+        "low_sample_warning": true,
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
       }
     }
   ],
   "excluded": [
     { "sa2_code": 175200, "sa2_name": "Te Rapa North", "reason": "insufficient_data", "data_status": "NO_DATA" },
-    { "sa2_code": 175300, "sa2_name": "Flagstaff North", "reason": "exceeds_budget", "median_rent": 750 }
+    {
+      "sa2_code": 175400,
+      "sa2_name": "Rotokauri-Waiwhakareke",
+      "reason": "exceeds_budget",
+      "lowest_rent": {
+        "value": 650,
+        "dwelling_type": "House",
+        "number_of_beds": "ALL",
+        "total_bonds": 6,
+        "low_sample_warning": true,
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+      }
+    }
   ]
 }
 ```
@@ -292,11 +371,14 @@ just truncated here the same way):
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
   STALE, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 44 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 52 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
-  zero-bus-stop suburbs, determinism, zero-weight criteria). Start the server
-  first, then:
+  zero-bus-stop suburbs, determinism, zero-weight criteria, and `lowest_rent`
+  — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
+  documented 50/60 warned split, and a "smoking gun" check that a suburb is
+  actually included by its `lowest_rent` and not its `median_rent`). Start
+  the server first, then:
 
   ```
   python3 backend/tests/test_suburb_finder.py
