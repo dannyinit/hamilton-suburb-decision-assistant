@@ -248,6 +248,29 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   own full-population distance range — rather than one flat metre value, since the
   four destinations sit at genuinely different distances from the city.)
 
+  Confirmed against real data across every $5-step budget: with a normally-sized
+  survivor set, this floor never actually engages for rent or transport, and for
+  distance only at the 2-suburbs-left extreme for 2 of the 4 destinations — it's a
+  rare-edge-case safety net, not a mechanism doing routine work.
+
+- **Rent and distance are also rounded before scoring** — to the nearest $5 for
+  rent, nearest 100m for distance — so two suburbs closer together than the data's
+  real precision score identically instead of being ranked apart on noise. This is
+  a different fix from the threshold floor above: the floor protects against a
+  *whole population* being too tightly clustered, while rounding protects against
+  *individual pairs* being closer than the data can actually distinguish. Rent's
+  $5 step matches the data itself — 55 of the 60 `CURRENT` suburbs' `median_rent`
+  already land on an exact multiple of $5. Distance's 100m step has no equivalent
+  data-derived answer (adjacent suburbs' `distance_m` can differ by fractions of a
+  metre, an artifact of computing straight-line distance from an SA2 centroid, with
+  no natural "reporting bucket" the way rent has one) — it's a judgment call, chosen
+  as a city-block-scale unit well below the distance thresholds above. Transport
+  (`bus_stop_count`) is deliberately not rounded: it's already a small integer
+  count, and a difference of 1 stop is a real difference, not measurement noise.
+  Only the scoring input is rounded — `score_breakdown.rent.value`/`distance.value`
+  still show the raw figure, and `lowest_rent` (the budget hard constraint) is
+  never rounded, since it's a boundary check, not a normalised score.
+
 - `overall_score` is the weights-normalised sum of the three per-criterion scores
   (Weighted Sum Model). Results are ranked by `overall_score` descending, ties
   broken by `sa2_code` for deterministic ordering.
@@ -265,11 +288,11 @@ included and 23 excluded):
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.7739,
+      "overall_score": 0.7732,
       "score_breakdown": {
         "rent": { "value": 400, "normalised_score": 0.8537 },
         "transport": { "value": 28, "normalised_score": 1 },
-        "distance": { "value": 5982.44, "normalised_score": 0.468 }
+        "distance": { "value": 5982.44, "normalised_score": 0.4659 }
       },
       "lowest_rent": {
         "value": 125,
@@ -371,14 +394,16 @@ here the same way):
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
   STALE, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 52 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 60 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
-  zero-bus-stop suburbs, determinism, zero-weight criteria, and `lowest_rent`
+  zero-bus-stop suburbs, determinism, zero-weight criteria, `lowest_rent`
   — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
   documented 50/60 warned split, and a "smoking gun" check that a suburb is
-  actually included by its `lowest_rent` and not its `median_rent`). Start
-  the server first, then:
+  actually included by its `lowest_rent` and not its `median_rent` — and the
+  rent/distance rounding-based tie behavior, with real suburbs confirmed to
+  tie within a rounding bucket and not tie across one). Start the server
+  first, then:
 
   ```
   python3 backend/tests/test_suburb_finder.py

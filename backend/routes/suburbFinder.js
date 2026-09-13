@@ -17,6 +17,15 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // full-population range, since the four destinations sit at genuinely
 // different distances from the city (confirmed against real geography
 // before being hardcoded here).
+//
+// This guards a different scenario from ROUNDING_STEP below: it stops a
+// genuinely tight population (e.g. a heavily budget-narrowed `included`
+// set) from being stretched to fill [0,1] as if its small spread were the
+// full story. Confirmed against real data across every $5-step budget:
+// with a normally-sized `included` set this floor never actually engages
+// for rent or transport, and for distance only at the 2-suburbs-left
+// extreme for 2 of 4 destinations — it's a rare-edge-case safety net, not
+// the mechanism doing routine work.
 const RENT_THRESHOLD = 50;
 const TRANSPORT_THRESHOLD = 3;
 const DISTANCE_THRESHOLDS = {
@@ -25,6 +34,27 @@ const DISTANCE_THRESHOLDS = {
   'The Base': 940,
   'Waikato Hospital': 950,
 };
+
+// Rounding step applied to a criterion's raw value before it ever reaches
+// normaliseCriterion, so two suburbs differing by less than the data's real
+// precision score identically instead of being ranked apart on noise.
+// Rent: 55/60 CURRENT suburbs' median_rent already lands on an exact
+// multiple of $5 (the other 5 are off by $1-3) — $5 is the data's own
+// granularity, not a guess. Distance: adjacent suburbs' distance_m can
+// differ by fractions of a metre (e.g. 0.14m) — an artifact of computing
+// straight-line distance from an SA2 centroid, with no meaningful
+// precision anywhere near that fine. 100m has no equivalent data-derived
+// answer (there's no natural "reporting bucket" the way rent has one) —
+// it's a judgment call, chosen as a city-block-scale unit well below the
+// ~750-1000m distance thresholds above. Transport (bus_stop_count) is
+// deliberately not rounded: it's already a small integer count, and a
+// difference of 1 stop is a real difference, not measurement noise.
+const RENT_ROUNDING_STEP = 5;
+const DISTANCE_ROUNDING_STEP = 100;
+
+function roundTo(value, step) {
+  return Math.round(value / step) * step;
+}
 
 // Normalises one criterion across `included` to a [0,1] score per suburb.
 // - True tie (every suburb has the identical value): 0.5 for all — zero
@@ -36,6 +66,11 @@ const DISTANCE_THRESHOLDS = {
 // - `reverse: true` is for cost criteria (rent, distance) where lower is
 //   better; `reverse: false` for benefit criteria (transport) where higher
 //   is better.
+// - Callers that pass a `getValue` rounded to the criterion's real-world
+//   precision (see ROUNDING_STEP above) get same-bucket suburbs tied at
+//   the same score for free here, with no extra logic needed — identical
+//   rounded values just flow through the same min-max math as any other
+//   tie.
 function normaliseCriterion(included, { getValue, threshold, reverse }) {
   const values = included.map(getValue);
   const actualMin = Math.min(...values);
@@ -309,7 +344,12 @@ function computeSuburbFinder(query) {
   // budget-filter), per the design decision that ranking should reflect
   // relative comparison among viable options, not all 62 suburbs.
   const rentScores = normaliseCriterion(included, {
-    getValue: (s) => s.median_rent,
+    // Rounded for scoring only — the raw median_rent is still what's shown
+    // in score_breakdown below. This is the ALL/ALL median (the scoring
+    // criterion); it's a separate field from lowest_rent (the budget hard
+    // constraint), which stays unrounded since it's a boundary check, not
+    // a normalised score.
+    getValue: (s) => roundTo(s.median_rent, RENT_ROUNDING_STEP),
     threshold: RENT_THRESHOLD,
     reverse: true, // cost: lower rent is better
   });
@@ -320,7 +360,9 @@ function computeSuburbFinder(query) {
   });
   const distanceScores = hasDestination
     ? normaliseCriterion(included, {
-      getValue: (s) => s.distance_m,
+      // Rounded for scoring only — the raw distance_m is still what's
+      // shown in score_breakdown below.
+      getValue: (s) => roundTo(s.distance_m, DISTANCE_ROUNDING_STEP),
       threshold: DISTANCE_THRESHOLDS[destination.name],
       reverse: true, // cost: shorter distance is better
     })

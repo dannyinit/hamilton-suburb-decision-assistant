@@ -125,7 +125,9 @@ check("budget=500 -> 39 results", len(r) == 39, len(r))
 check("budget=500 -> ranked descending by overall_score", all(r[i]["overall_score"] >= r[i+1]["overall_score"] for i in range(len(r)-1)), [x["overall_score"] for x in r])
 check("budget=500 -> Hamilton Central ranks #1 (equal weights)", r[0]["sa2_name"] == "Hamilton Central", r[0])
 hc = next(x for x in r if x["sa2_name"] == "Hamilton Central")
-manual = round((0.8537 + 1 + 0.468) / 3, 4)
+# distance normalised_score is 0.4659, not the raw-distance figure of 0.468 --
+# distance_m (5982.44) rounds to 6000m for scoring (see the 100m rounding step).
+manual = round((0.8537 + 1 + 0.4659) / 3, 4)
 check("Hamilton Central overall_score matches manual calc", abs(hc["overall_score"] - manual) < 0.001, (hc["overall_score"], manual))
 
 # --- 6. Full population (very high budget) ---
@@ -218,6 +220,50 @@ check("budget=10000 -> 50/60 suburbs carry low_sample_warning (the only meaningf
 code, body = call({"budget": 500, "destination": "The Base"})
 exceeds_budget = [e for e in body["excluded"] if e["reason"] == "exceeds_budget"]
 check("budget=500 -> exceeds_budget-excluded entries also carry a lowest_rent object", len(exceeds_budget) > 0 and all("lowest_rent" in e and "value" in e["lowest_rent"] for e in exceeds_budget), exceeds_budget[:1])
+
+# --- 14. Rounding-based tie behavior (rent to $5, distance to 100m) ---
+# Confirmed against real data before this was written: at budget=600 with no
+# destination, Hamilton East Cook ($568) and Forest Lake ($570) are 2 apart
+# raw but both round to $570 -- they should score identically instead of
+# being ranked apart on noise smaller than MBIE's own reporting granularity.
+code, body = call({"budget": 600})
+r = body["results"]
+by_name = {x["sa2_name"]: x for x in r}
+hec = by_name.get("Hamilton East Cook")
+fl = by_name.get("Forest Lake (Hamilton City)")
+check("rent rounding: Hamilton East Cook ($568) and Forest Lake ($570) present", hec is not None and fl is not None, list(by_name.keys())[:5])
+if hec and fl:
+    check("rent rounding: raw values are 2 apart, not equal", hec["score_breakdown"]["rent"]["value"] != fl["score_breakdown"]["rent"]["value"], (hec["score_breakdown"]["rent"]["value"], fl["score_breakdown"]["rent"]["value"]))
+    check("rent rounding: both round to $570 and tie on rentScore", hec["score_breakdown"]["rent"]["normalised_score"] == fl["score_breakdown"]["rent"]["normalised_score"], (hec["score_breakdown"]["rent"], fl["score_breakdown"]["rent"]))
+
+# Fairfield ($573) rounds to $575 -- a different bucket from both $570 and
+# $580 -- so it should NOT tie with either, confirming rounding creates
+# ties only within a bucket, not indiscriminately.
+ff = by_name.get("Fairfield (Hamilton City)")
+kahikatea = by_name.get("Kahikatea")  # $545, unrelated bucket, sanity contrast
+check("rent rounding: Fairfield ($573->$575) does not tie with Forest Lake ($570->$570)", ff is not None and fl is not None and ff["score_breakdown"]["rent"]["normalised_score"] != fl["score_breakdown"]["rent"]["normalised_score"], (ff, fl) if ff and fl else None)
+
+# Distance: at budget=600 with University of Waikato, Silverdale (1078m),
+# Hillcrest West (1146m) and Hillcrest East (1111m) are all within 100m of
+# each other but not of each other's raw value -- all three round to
+# 1100m and should tie on distScore.
+code, body = call({"budget": 600, "destination": "University of Waikato"})
+r = body["results"]
+by_name = {x["sa2_name"]: x for x in r}
+trio_names = ["Silverdale (Hamilton City)", "Hillcrest West (Hamilton City)", "Hillcrest East (Hamilton City)"]
+trio = {name: by_name.get(name) for name in trio_names}
+check("distance rounding: all three ~1.1km suburbs present", all(v is not None for v in trio.values()), list(by_name.keys())[:5])
+if all(trio.values()):
+    raw_values = {name: v["score_breakdown"]["distance"]["value"] for name, v in trio.items()}
+    scores = {name: v["score_breakdown"]["distance"]["normalised_score"] for name, v in trio.items()}
+    check("distance rounding: raw distance_m values are not all equal", len(set(raw_values.values())) == 3, raw_values)
+    check("distance rounding: all three round to 1100m and tie on distScore", len(set(scores.values())) == 1, scores)
+
+# Ruakura (1253m -> rounds to 1300m) is a different bucket from the trio
+# above -- should not tie with them, same contrast principle as Fairfield.
+ruakura = by_name.get("Ruakura")
+if ruakura and all(trio.values()):
+    check("distance rounding: Ruakura (1253m->1300m) does not tie with the ~1100m trio", ruakura["score_breakdown"]["distance"]["normalised_score"] not in scores.values(), (ruakura["score_breakdown"]["distance"], scores))
 
 # --- summary ---
 passed = sum(1 for s, _, _ in results_log if s == "PASS")
