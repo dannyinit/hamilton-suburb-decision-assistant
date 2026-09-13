@@ -426,6 +426,21 @@
   color: #44403c;
 }
 
+/* Teal, unlike the app title above the nav bar — this IS an interactive
+   element (a real navigation link), exactly what that colour is reserved
+   for in this app. */
+.suburb-ranking-rpc-link {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0e7490;
+  text-decoration: none;
+}
+
+.suburb-ranking-rpc-link:hover {
+  text-decoration: underline;
+}
+
 .excluded-list {
   margin-top: 1rem;
   font-size: 0.85rem;

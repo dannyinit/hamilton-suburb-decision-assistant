@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getSuburbs, getBedAvailability, getRentalPriceCheck } from '../api';
 import RentalPriceCheckForm from './RentalPriceCheckForm';
 import RentalPriceCheckResult from './RentalPriceCheckResult';
@@ -17,6 +18,15 @@ const INITIAL_VALUES = {
 const EMPTY_BEDS = [];
 
 function RentalPriceCheck() {
+  const [searchParams] = useSearchParams();
+  // Arrived via Suburb Finder's "Check detailed rent" link, which passes
+  // sa2_code (always) and dwelling_type (the suburb's lowest_rent type) as
+  // query params — read once to seed the form. Not kept in sync afterwards:
+  // this only seeds the initial values, it doesn't turn the whole form into
+  // URL-driven state for every later change.
+  const linkedSa2Code = searchParams.get('sa2_code');
+  const linkedDwellingType = searchParams.get('dwelling_type');
+
   const [suburbs, setSuburbs] = useState(null);
   const [suburbsError, setSuburbsError] = useState(null);
 
@@ -26,7 +36,11 @@ function RentalPriceCheck() {
   const [bedAvailability, setBedAvailability] = useState(null);
   const [showAllBeds, setShowAllBeds] = useState(false);
 
-  const [values, setValues] = useState(INITIAL_VALUES);
+  const [values, setValues] = useState(() => ({
+    ...INITIAL_VALUES,
+    sa2_code: linkedSa2Code ?? INITIAL_VALUES.sa2_code,
+    dwelling_type: linkedDwellingType ?? INITIAL_VALUES.dwelling_type,
+  }));
   const [status, setStatus] = useState('idle'); // idle | loading | error | success
   const [result, setResult] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -74,6 +88,39 @@ function RentalPriceCheck() {
       setStatus('error');
     }
   }
+
+  // Submit immediately when arriving via the link, instead of making the
+  // user press "Check" again for a suburb they already chose to look at in
+  // Suburb Finder. Deliberately doesn't call handleSubmit (which closes
+  // over `values`, changing identity every render) — building the request
+  // from linkedSa2Code/linkedDwellingType directly means the effect's real
+  // dependencies are two stable strings that only change if the URL itself
+  // does, not "every render", so this only ever fires once for a given link.
+  // A suburb picked later by hand still submits only on a real button press.
+  useEffect(() => {
+    if (!linkedSa2Code) return;
+    let cancelled = false;
+    setStatus('loading');
+    setErrorMessage(null);
+    getRentalPriceCheck({
+      ...INITIAL_VALUES,
+      sa2_code: linkedSa2Code,
+      dwelling_type: linkedDwellingType ?? INITIAL_VALUES.dwelling_type,
+    })
+      .then((data) => {
+        if (cancelled) return;
+        setResult(data);
+        setStatus('success');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setErrorMessage(err.message);
+        setStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedSa2Code, linkedDwellingType]);
 
   return (
     <section className="rental-price-check">

@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 // number_of_beds is 'ALL', a specific count ('1', '5+'), or null (a
 // distinct MBIE category, not a duplicate of 'ALL' — see
 // backend/README.md) — 'ALL' and null both just mean "no specific bed
@@ -188,6 +190,12 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
               </summary>
               <ScoreBreakdown breakdown={result.score_breakdown} destination={data.destination} />
               <LowestRent lowestRent={result.lowest_rent} />
+              <Link
+                to={`/rental-price-check?${new URLSearchParams({ sa2_code: result.sa2_code, dwelling_type: result.lowest_rent.dwelling_type }).toString()}`}
+                className="suburb-ranking-rpc-link"
+              >
+                Check detailed rent in Rental Price Check →
+              </Link>
             </details>
           </li>
         ))}
