@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { lowSampleWarning } = require('../lowSampleWarning');
 
 const router = express.Router();
 
@@ -48,6 +49,72 @@ function stalenessWarning(row) {
   if (row.quarters_stale < STALE_THRESHOLD_QUARTERS) return null;
   const quarterWord = row.quarters_stale === 1 ? 'quarter' : 'quarters';
   return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
+}
+
+// "Other dwelling types" breakdown, shown below the primary result — every
+// specific (dwelling_type != 'ALL', number_of_beds='ALL') row the suburb
+// genuinely has data for, excluding whichever dwelling_type the primary
+// result actually displays (post-fallback), each with its own nested
+// specific-bed breakdown. The NULL-beds category is skipped throughout,
+// same as the primary lookup above never exposes it.
+const findOtherDwellingTypesStmt = db.prepare(`
+  SELECT dwelling_type, median_rent, total_bonds
+  FROM rent
+  WHERE sa2_code = ? AND dwelling_type != 'ALL' AND number_of_beds = 'ALL' AND median_rent IS NOT NULL
+`);
+
+// One query for every specific-bed row across all dwelling types in the
+// suburb, grouped by dwelling_type in JS below — avoids one query per
+// dwelling_type row (at most 5 per suburb, so not a real N+1 concern
+// either way, but this stays consistent with how suburbFinder.js's
+// lowest_rent avoids per-row queries).
+const findDwellingTypeBedsStmt = db.prepare(`
+  SELECT dwelling_type, number_of_beds, median_rent, total_bonds
+  FROM rent
+  WHERE sa2_code = ? AND dwelling_type != 'ALL' AND number_of_beds != 'ALL' AND number_of_beds IS NOT NULL
+    AND median_rent IS NOT NULL
+`);
+
+// Display order for dwelling types matches VALID_DWELLING_TYPES (the same
+// order the frontend's dropdown already uses) rather than e.g. cheapest
+// first, so a suburb's breakdown reads in the order a user already expects
+// from elsewhere on the same page. Same idea for bed counts: MBIE's own
+// category order (from VALID_NUMBER_OF_BEDS), not a plain numeric sort,
+// since '15' precedes '5+' there — a numeric sort would separate them from
+// the neighbours they're documented to relate to.
+const DWELLING_TYPE_ORDER = VALID_DWELLING_TYPES.filter((type) => type !== 'ALL');
+const NUMBER_OF_BEDS_ORDER = VALID_NUMBER_OF_BEDS.filter((beds) => beds !== 'ALL');
+
+function toLowSampleFields(totalBonds) {
+  const { isLowSample, note } = lowSampleWarning(totalBonds);
+  return { low_sample_warning: isLowSample, low_sample_note: note };
+}
+
+function buildOtherDwellingTypes(sa2Code, excludeDwellingType) {
+  const typeRows = findOtherDwellingTypesStmt.all(sa2Code)
+    .filter((row) => row.dwelling_type !== excludeDwellingType);
+
+  const bedsByType = {};
+  for (const row of findDwellingTypeBedsStmt.all(sa2Code)) {
+    (bedsByType[row.dwelling_type] ??= []).push(row);
+  }
+
+  return typeRows
+    .sort((a, b) => DWELLING_TYPE_ORDER.indexOf(a.dwelling_type) - DWELLING_TYPE_ORDER.indexOf(b.dwelling_type))
+    .map((typeRow) => ({
+      dwelling_type: typeRow.dwelling_type,
+      median_rent: typeRow.median_rent,
+      total_bonds: typeRow.total_bonds,
+      ...toLowSampleFields(typeRow.total_bonds),
+      beds: (bedsByType[typeRow.dwelling_type] ?? [])
+        .sort((a, b) => NUMBER_OF_BEDS_ORDER.indexOf(a.number_of_beds) - NUMBER_OF_BEDS_ORDER.indexOf(b.number_of_beds))
+        .map((bedRow) => ({
+          number_of_beds: bedRow.number_of_beds,
+          median_rent: bedRow.median_rent,
+          total_bonds: bedRow.total_bonds,
+          ...toLowSampleFields(bedRow.total_bonds),
+        })),
+    }));
 }
 
 // Pure computation, decoupled from Express req/res, so both the real route
@@ -149,6 +216,8 @@ function computeRentalPriceCheck(query) {
       median_rent: row.median_rent,
       lower_quartile_rent: row.lower_quartile_rent,
       upper_quartile_rent: row.upper_quartile_rent,
+      total_bonds: row.total_bonds,
+      ...toLowSampleFields(row.total_bonds),
       fallback_level: fallbackLevel,
       ...(fallbackLevel !== 'none' && {
         fallback_note: FALLBACK_NOTES[fallbackLevel],
@@ -157,6 +226,7 @@ function computeRentalPriceCheck(query) {
       quarters_stale: row.quarters_stale,
       staleness_warning: stalenessWarning(row),
       ...(rent !== null ? { rent, comparison } : {}),
+      other_dwelling_types: buildOtherDwellingTypes(sa2Code, row.dwelling_type),
     },
   };
 }

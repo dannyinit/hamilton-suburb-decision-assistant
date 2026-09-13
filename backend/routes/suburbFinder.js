@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../db');
+const { lowSampleWarning } = require('../lowSampleWarning');
 
 const router = express.Router();
 
@@ -51,35 +52,6 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
   });
 }
 
-// Single binary "trust this figure less" warning for lowest_rent, based
-// purely on the sample size (total_bonds) of whichever specific
-// dwelling_type/number_of_beds row it came from. Informational only, not
-// an eligibility gate — every suburb's cheapest specific row counts
-// regardless of how small its sample is, per the design decision that
-// hard-constraint filtering should err towards inclusion (scoring, below,
-// is unaffected by this and still uses the far more stable ALL/ALL
-// median_rent).
-//
-// Threshold is MBIE's own minimum publishable sample size (6 — anything
-// smaller and they suppress the row entirely), not an arbitrary cutoff.
-// A two-tier version (mild/strong at <20/<10) was tried first, but across
-// all 60 CURRENT suburbs the lowest_rent total_bonds values are only ever
-// 6, 9, 12, or 15 — so any tier boundary above 15 warns 100% of suburbs,
-// and no boundary produces a materially different split from this one.
-// <=6 is the only split point the real data actually supports (50/60
-// suburbs sit exactly at the floor; the other 10 clear it).
-const LOW_SAMPLE_THRESHOLD = 6;
-
-function lowestRentWarning(totalBonds) {
-  const isLowSample = totalBonds <= LOW_SAMPLE_THRESHOLD;
-  return {
-    isLowSample,
-    note: isLowSample
-      ? `This figure is based on a very small sample (${totalBonds} bonds — MBIE's own minimum reportable size) — treat it as a rough indication only.`
-      : null,
-  };
-}
-
 // One row per suburb for the chosen destination: data status (for the
 // insufficient_data hard constraint), the ALL/ALL median rent (for the
 // rent scoring criterion only — NOT the budget check, see `cheapest`
@@ -94,9 +66,9 @@ function lowestRentWarning(totalBonds) {
 // constraint actually compares against, so a suburb where e.g. Rooms are
 // genuinely affordable isn't excluded just because its House-dominated
 // overall median looks expensive. No minimum sample size is required
-// (see lowestRentWarning above for why) and every CURRENT suburb has at
-// least a House row, so this is never null for a row that reaches the
-// budget check.
+// (see lowSampleWarning in ../lowSampleWarning.js for why) and every
+// CURRENT suburb has at least a House row, so this is never null for a
+// row that reaches the budget check.
 const CHEAPEST_SPECIFIC_ROW_CTE = `
   WITH cheapest AS (
     SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds,
@@ -274,7 +246,7 @@ function computeSuburbFinder(query) {
       continue;
     }
 
-    const { isLowSample, note } = lowestRentWarning(row.lowest_rent_total_bonds);
+    const { isLowSample, note } = lowSampleWarning(row.lowest_rent_total_bonds);
     const lowestRent = {
       value: row.lowest_rent,
       dwelling_type: row.lowest_dwelling_type,

@@ -291,6 +291,48 @@
   color: #991b1b;
 }
 
+/* Section A (other dwelling types) and, nested inside each row, Section B
+   (that type's specific bed counts) — both collapsed by default via native
+   <details>, same pattern already used elsewhere (Suburb Finder's ranking
+   rows, excluded list) rather than a custom accordion. */
+.other-dwelling-types {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e7e5e4;
+  font-size: 0.85rem;
+}
+
+.other-dwelling-types > ul {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.other-dwelling-types summary {
+  cursor: pointer;
+}
+
+/* Section B's own list, indented one level under its Section A row so the
+   nesting reads visually, not just structurally. */
+.dwelling-type-beds {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: #44403c;
+}
+
+.no-beds-detail {
+  margin: 0.4rem 0 0;
+  padding-left: 1rem;
+  color: #78716c;
+}
+
 /* Suburb Finder */
 
 .suburb-ranking-legend {

@@ -36,6 +36,52 @@ function fullFallbackNote(data) {
   return `No data for ${dwellingTypePlural} in ${data.sa2_name} — showing the median rent across all dwelling types and bed counts instead.`;
 }
 
+// Other dwelling types this suburb genuinely has data for, excluding
+// whichever dwelling_type the primary result actually displays (already
+// filtered out by the backend) — collapsed by default, since it's
+// supplementary detail, not the primary answer. Each type is itself an
+// expandable row revealing its specific bed counts, so the default view
+// stays a short list (avg ~2 types/suburb) and only grows when a user
+// drills into one. No prop needed for "the excluded type": the backend
+// has already removed it from `types`.
+function OtherDwellingTypes({ types }) {
+  if (types.length === 0) return null;
+
+  return (
+    <details className="other-dwelling-types">
+      <summary>Other dwelling types with data ({types.length})</summary>
+      <ul>
+        {types.map((dt) => (
+          <li key={dt.dwelling_type}>
+            <details>
+              <summary>
+                {getDwellingTypeLabel(dt.dwelling_type)}: ${dt.median_rent}/week (based on {dt.total_bonds} bond{dt.total_bonds === 1 ? '' : 's'})
+              </summary>
+              {dt.low_sample_warning && (
+                <div className="banner banner-warning">{dt.low_sample_note}</div>
+              )}
+              {dt.beds.length > 0 ? (
+                <ul className="dwelling-type-beds">
+                  {dt.beds.map((bed) => (
+                    <li key={bed.number_of_beds}>
+                      {getNumberOfBedsLabel(bed.number_of_beds)}: ${bed.median_rent}/week (based on {bed.total_bonds} bond{bed.total_bonds === 1 ? '' : 's'})
+                      {bed.low_sample_warning && (
+                        <div className="banner banner-warning">{bed.low_sample_note}</div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="no-beds-detail">No bed-count breakdown available for this dwelling type.</p>
+              )}
+            </details>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function RentalPriceCheckResult({ status, data, errorMessage }) {
   if (status === 'idle') {
     return (
@@ -85,6 +131,10 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         <div className="banner banner-warning">{data.staleness_warning}</div>
       )}
 
+      {data.low_sample_warning && (
+        <div className="banner banner-warning">{data.low_sample_note}</div>
+      )}
+
       <dl className="rent-stats">
         <div>
           <dt>Lower quartile</dt>
@@ -114,6 +164,8 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
           Your rent of ${data.rent}/week is <strong>{data.comparison}</strong>
         </p>
       )}
+
+      <OtherDwellingTypes types={data.other_dwelling_types} />
     </div>
   );
 }
