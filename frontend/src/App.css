@@ -10,6 +10,18 @@
   padding: 1.5rem;
 }
 
+.app-header h1 {
+  /* No explicit color: inherits body's #1c1917, matching the page-level
+     <h2> headings below it — teal (#0e7490) stays reserved for
+     interactive/active state (active nav link, score values), not shared
+     with static branding. 2rem vs. the h2s' unstyled browser-default ~1.5rem
+     mirrors the UA stylesheet's own h1:h2 ratio (2em:1.5em), so the visual
+     hierarchy actually reads larger at a glance, not just structurally
+     correct via the tag. */
+  margin: 0 0 1.5rem;
+  font-size: 2rem;
+}
+
 .nav-bar {
   display: flex;
   gap: 1.5rem;

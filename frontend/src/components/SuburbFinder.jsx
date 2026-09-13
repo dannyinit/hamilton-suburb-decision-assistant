@@ -199,7 +199,7 @@ function SuburbFinder() {
 
   return (
     <section className="suburb-finder">
-      <h1>Suburb Finder</h1>
+      <h2>Suburb Finder</h2>
       <p className="lede">
         Enter your weekly budget and press "Find suburbs" to get started. Once
         you have results, adjusting the sliders or destination updates the
