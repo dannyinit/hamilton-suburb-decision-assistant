@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { lowSampleWarning } = require('../lowSampleWarning');
+const { lowSampleWarning, LOW_SAMPLE_FOOTNOTE } = require('../lowSampleWarning');
 
 const router = express.Router();
 
@@ -51,13 +51,16 @@ function stalenessWarning(row) {
   return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
 }
 
-// "Other dwelling types" breakdown, shown below the primary result — every
+// Dwelling-type breakdown table shown below the primary result — every
 // specific (dwelling_type != 'ALL', number_of_beds='ALL') row the suburb
-// genuinely has data for, excluding whichever dwelling_type the primary
-// result actually displays (post-fallback), each with its own nested
-// specific-bed breakdown. The NULL-beds category is skipped throughout,
-// same as the primary lookup above never exposes it.
-const findOtherDwellingTypesStmt = db.prepare(`
+// genuinely has data for, INCLUDING whichever dwelling_type the primary
+// result itself displays (post-fallback) — that row is flagged via
+// is_current rather than filtered out, so the table is a genuinely
+// complete picture, not "everything except what you already saw". Each
+// row carries its own nested specific-bed breakdown. The NULL-beds
+// category is skipped throughout, same as the primary lookup above never
+// exposes it.
+const findDwellingTypesStmt = db.prepare(`
   SELECT dwelling_type, median_rent, total_bonds
   FROM rent
   WHERE sa2_code = ? AND dwelling_type != 'ALL' AND number_of_beds = 'ALL' AND median_rent IS NOT NULL
@@ -85,36 +88,42 @@ const findDwellingTypeBedsStmt = db.prepare(`
 const DWELLING_TYPE_ORDER = VALID_DWELLING_TYPES.filter((type) => type !== 'ALL');
 const NUMBER_OF_BEDS_ORDER = VALID_NUMBER_OF_BEDS.filter((beds) => beds !== 'ALL');
 
-function toLowSampleFields(totalBonds) {
-  const { isLowSample, note } = lowSampleWarning(totalBonds);
-  return { low_sample_warning: isLowSample, low_sample_note: note };
-}
-
-function buildOtherDwellingTypes(sa2Code, excludeDwellingType) {
-  const typeRows = findOtherDwellingTypesStmt.all(sa2Code)
-    .filter((row) => row.dwelling_type !== excludeDwellingType);
-
+// Returns { breakdown, anyLowSample } — anyLowSample tells the caller
+// whether to attach the single shared LOW_SAMPLE_FOOTNOTE at all (only
+// when at least one row in the table actually needs it), rather than
+// always including a footnote that might reference nothing on the page.
+function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
   const bedsByType = {};
   for (const row of findDwellingTypeBedsStmt.all(sa2Code)) {
     (bedsByType[row.dwelling_type] ??= []).push(row);
   }
 
-  return typeRows
+  let anyLowSample = false;
+  const markIfLowSample = (totalBonds) => {
+    const { isLowSample } = lowSampleWarning(totalBonds);
+    if (isLowSample) anyLowSample = true;
+    return isLowSample;
+  };
+
+  const breakdown = findDwellingTypesStmt.all(sa2Code)
     .sort((a, b) => DWELLING_TYPE_ORDER.indexOf(a.dwelling_type) - DWELLING_TYPE_ORDER.indexOf(b.dwelling_type))
     .map((typeRow) => ({
       dwelling_type: typeRow.dwelling_type,
+      is_current: typeRow.dwelling_type === currentDwellingType,
       median_rent: typeRow.median_rent,
       total_bonds: typeRow.total_bonds,
-      ...toLowSampleFields(typeRow.total_bonds),
+      low_sample_warning: markIfLowSample(typeRow.total_bonds),
       beds: (bedsByType[typeRow.dwelling_type] ?? [])
         .sort((a, b) => NUMBER_OF_BEDS_ORDER.indexOf(a.number_of_beds) - NUMBER_OF_BEDS_ORDER.indexOf(b.number_of_beds))
         .map((bedRow) => ({
           number_of_beds: bedRow.number_of_beds,
           median_rent: bedRow.median_rent,
           total_bonds: bedRow.total_bonds,
-          ...toLowSampleFields(bedRow.total_bonds),
+          low_sample_warning: markIfLowSample(bedRow.total_bonds),
         })),
     }));
+
+  return { breakdown, anyLowSample };
 }
 
 // Pure computation, decoupled from Express req/res, so both the real route
@@ -204,6 +213,13 @@ function computeRentalPriceCheck(query) {
     ? comparisonLabel(rent, row.lower_quartile_rent, row.upper_quartile_rent)
     : null;
 
+  // The primary result keeps its own full-sentence warning (unchanged, one
+  // occurrence per response) — only the breakdown table below switches to
+  // the compact marker + single shared footnote, since that's where a full
+  // sentence per row would actually repeat.
+  const { isLowSample: primaryIsLowSample, note: primaryLowSampleNote } = lowSampleWarning(row.total_bonds);
+  const { breakdown: dwellingTypeBreakdown, anyLowSample } = buildDwellingTypeBreakdown(sa2Code, row.dwelling_type);
+
   return {
     status: 200,
     body: {
@@ -217,7 +233,8 @@ function computeRentalPriceCheck(query) {
       lower_quartile_rent: row.lower_quartile_rent,
       upper_quartile_rent: row.upper_quartile_rent,
       total_bonds: row.total_bonds,
-      ...toLowSampleFields(row.total_bonds),
+      low_sample_warning: primaryIsLowSample,
+      low_sample_note: primaryLowSampleNote,
       fallback_level: fallbackLevel,
       ...(fallbackLevel !== 'none' && {
         fallback_note: FALLBACK_NOTES[fallbackLevel],
@@ -226,7 +243,8 @@ function computeRentalPriceCheck(query) {
       quarters_stale: row.quarters_stale,
       staleness_warning: stalenessWarning(row),
       ...(rent !== null ? { rent, comparison } : {}),
-      other_dwelling_types: buildOtherDwellingTypes(sa2Code, row.dwelling_type),
+      dwelling_type_breakdown: dwellingTypeBreakdown,
+      ...(anyLowSample && { low_sample_footnote: LOW_SAMPLE_FOOTNOTE }),
     },
   };
 }

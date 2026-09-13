@@ -23,4 +23,12 @@ function lowSampleWarning(totalBonds) {
   };
 }
 
-module.exports = { LOW_SAMPLE_THRESHOLD, lowSampleWarning };
+// A single shared explanation for callers that show a compact per-row
+// marker (e.g. a † symbol) instead of repeating the full sentence above on
+// every qualifying row — rentalPriceCheck.js's dwelling-type breakdown
+// table shows this once, in a footer, rather than once per row. Plain
+// text; the marker symbol itself is a presentation detail left to the
+// frontend, not baked in here.
+const LOW_SAMPLE_FOOTNOTE = `Based on a small sample (${LOW_SAMPLE_THRESHOLD} bonds or fewer — MBIE's own minimum reportable size); treat as a rough indication.`;
+
+module.exports = { LOW_SAMPLE_THRESHOLD, LOW_SAMPLE_FOOTNOTE, lowSampleWarning };

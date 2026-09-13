@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react';
 import { getDwellingTypeLabel, getDwellingTypePluralLabel, getNumberOfBedsLabel } from '../rentalCheckOptions';
 
 const COMPARISON_CLASS = {
@@ -36,49 +37,119 @@ function fullFallbackNote(data) {
   return `No data for ${dwellingTypePlural} in ${data.sa2_name} — showing the median rent across all dwelling types and bed counts instead.`;
 }
 
-// Other dwelling types this suburb genuinely has data for, excluding
-// whichever dwelling_type the primary result actually displays (already
-// filtered out by the backend) — collapsed by default, since it's
-// supplementary detail, not the primary answer. Each type is itself an
-// expandable row revealing its specific bed counts, so the default view
-// stays a short list (avg ~2 types/suburb) and only grows when a user
-// drills into one. No prop needed for "the excluded type": the backend
-// has already removed it from `types`.
-function OtherDwellingTypes({ types }) {
-  if (types.length === 0) return null;
+// Compact per-row indicator for low_sample_warning, replacing a repeated
+// full-sentence banner — the explanation itself appears once, in the
+// table's shared footnote (see DwellingTypeBreakdownTable's `footnote`).
+function LowSampleMarker({ warning }) {
+  if (!warning) return null;
+  return <sup className="low-sample-marker" aria-hidden="true">†</sup>;
+}
+
+// Section B: a dwelling type's specific bed counts, revealed by expanding
+// its row in Section A below. `beds` is empty for dwelling types that have
+// an overall ALL-beds figure but no specific-bed rows underneath it (a
+// real, if uncommon, MBIE data shape) — shown as a note rather than an
+// empty table.
+function BedsSubtable({ beds }) {
+  if (beds.length === 0) {
+    return <p className="no-beds-detail">No bed-count breakdown available for this dwelling type.</p>;
+  }
 
   return (
-    <details className="other-dwelling-types">
-      <summary>Other dwelling types with data ({types.length})</summary>
-      <ul>
-        {types.map((dt) => (
-          <li key={dt.dwelling_type}>
-            <details>
-              <summary>
-                {getDwellingTypeLabel(dt.dwelling_type)}: ${dt.median_rent}/week (based on {dt.total_bonds} bond{dt.total_bonds === 1 ? '' : 's'})
-              </summary>
-              {dt.low_sample_warning && (
-                <div className="banner banner-warning">{dt.low_sample_note}</div>
-              )}
-              {dt.beds.length > 0 ? (
-                <ul className="dwelling-type-beds">
-                  {dt.beds.map((bed) => (
-                    <li key={bed.number_of_beds}>
-                      {getNumberOfBedsLabel(bed.number_of_beds)}: ${bed.median_rent}/week (based on {bed.total_bonds} bond{bed.total_bonds === 1 ? '' : 's'})
-                      {bed.low_sample_warning && (
-                        <div className="banner banner-warning">{bed.low_sample_note}</div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="no-beds-detail">No bed-count breakdown available for this dwelling type.</p>
-              )}
-            </details>
-          </li>
+    <table className="beds-subtable">
+      <thead>
+        <tr>
+          <th scope="col">Beds</th>
+          <th scope="col">Median rent</th>
+          <th scope="col">Sample size</th>
+        </tr>
+      </thead>
+      <tbody>
+        {beds.map((bed) => (
+          <tr key={bed.number_of_beds}>
+            <th scope="row">{getNumberOfBedsLabel(bed.number_of_beds)}</th>
+            <td>${bed.median_rent}/week</td>
+            <td>{bed.total_bonds}<LowSampleMarker warning={bed.low_sample_warning} /></td>
+          </tr>
         ))}
-      </ul>
-    </details>
+      </tbody>
+    </table>
+  );
+}
+
+// Section A: every dwelling type this suburb genuinely has data for,
+// including whichever one the primary result above already shows (flagged
+// via is_current rather than filtered out, so this is a complete picture,
+// not "everything except what you already saw"). Each row expands to
+// Section B (its specific bed counts). Expand state is plain React state,
+// not the native <details> this app uses everywhere else — the revealed
+// content needs to span the full table width via colSpan, which a
+// <details> confined to one cell can't do.
+function DwellingTypeBreakdownTable({ breakdown, footnote }) {
+  const [expandedTypes, setExpandedTypes] = useState(() => new Set());
+
+  function toggle(dwellingType) {
+    setExpandedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(dwellingType)) {
+        next.delete(dwellingType);
+      } else {
+        next.add(dwellingType);
+      }
+      return next;
+    });
+  }
+
+  return (
+    <table className="dwelling-type-table">
+      <caption>Rent by dwelling type</caption>
+      <thead>
+        <tr>
+          <th scope="col">Dwelling type</th>
+          <th scope="col">Median rent</th>
+          <th scope="col">Sample size</th>
+        </tr>
+      </thead>
+      <tbody>
+        {breakdown.map((dt) => {
+          const isExpanded = expandedTypes.has(dt.dwelling_type);
+          return (
+            <Fragment key={dt.dwelling_type}>
+              <tr className={dt.is_current ? 'dwelling-type-row is-current' : 'dwelling-type-row'}>
+                <th scope="row">
+                  <button
+                    type="button"
+                    className="dwelling-type-toggle"
+                    aria-expanded={isExpanded}
+                    onClick={() => toggle(dt.dwelling_type)}
+                  >
+                    <span className="dwelling-type-chevron" aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
+                    {getDwellingTypeLabel(dt.dwelling_type)}
+                  </button>
+                  {dt.is_current && <span className="current-tag">(shown above)</span>}
+                </th>
+                <td>${dt.median_rent}/week</td>
+                <td>{dt.total_bonds}<LowSampleMarker warning={dt.low_sample_warning} /></td>
+              </tr>
+              {isExpanded && (
+                <tr className="dwelling-type-beds-row">
+                  <td colSpan={3}>
+                    <BedsSubtable beds={dt.beds} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
+      </tbody>
+      {footnote && (
+        <tfoot>
+          <tr>
+            <td colSpan={3}>† {footnote}</td>
+          </tr>
+        </tfoot>
+      )}
+    </table>
   );
 }
 
@@ -165,7 +236,7 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </p>
       )}
 
-      <OtherDwellingTypes types={data.other_dwelling_types} />
+      <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} footnote={data.low_sample_footnote} />
     </div>
   );
 }

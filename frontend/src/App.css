@@ -291,46 +291,114 @@
   color: #991b1b;
 }
 
-/* Section A (other dwelling types) and, nested inside each row, Section B
-   (that type's specific bed counts) — both collapsed by default via native
-   <details>, same pattern already used elsewhere (Suburb Finder's ranking
-   rows, excluded list) rather than a custom accordion. */
-.other-dwelling-types {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
+/* Section A: every dwelling type with data, one row each, expandable to
+   Section B (that type's specific bed counts). A real <table> rather than
+   the nested <details> lists this was originally built with — column
+   headers carry the "what level is this" signal that indentation/font-size
+   alone didn't, addressing the hierarchy problem directly. */
+.dwelling-type-table {
+  width: 100%;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
   border-top: 1px solid #e7e5e4;
+  border-collapse: collapse;
   font-size: 0.85rem;
 }
 
-.other-dwelling-types > ul {
-  list-style: none;
-  margin: 0.5rem 0 0;
+.dwelling-type-table caption {
+  text-align: left;
+  font-weight: 700;
+  color: #1c1917;
+  margin-bottom: 0.6rem;
+}
+
+.dwelling-type-table th,
+.dwelling-type-table td {
+  text-align: left;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+}
+
+.dwelling-type-table thead th {
+  color: #57534e;
+  font-weight: 400;
+  border-bottom: 1px solid #e7e5e4;
+}
+
+/* border-bottom on every data row (not just a flex gap) — rows need to
+   read as visually separate entries, not one blurred block, addressing
+   the separation problem. */
+.dwelling-type-row {
+  border-bottom: 1px solid #f0efed;
+}
+
+.dwelling-type-row.is-current {
+  background: #f0fdfa;
+}
+
+.dwelling-type-toggle {
+  background: none;
+  border: none;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
   gap: 0.4rem;
 }
 
-.other-dwelling-types summary {
-  cursor: pointer;
+.dwelling-type-chevron {
+  color: #a8a29e;
+  font-size: 0.75rem;
 }
 
-/* Section B's own list, indented one level under its Section A row so the
-   nesting reads visually, not just structurally. */
-.dwelling-type-beds {
-  list-style: none;
-  margin: 0.4rem 0 0;
-  padding-left: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+.current-tag {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  color: #0e7490;
+  font-weight: 600;
+}
+
+.low-sample-marker {
+  color: #92400e;
+  margin-left: 0.15rem;
+}
+
+/* The expanded row's cell — a tinted background distinguishes "this is
+   nested detail for the row above" from an ordinary sibling row, the
+   second half of addressing hierarchy (column headers cover Section A's
+   own level; this covers Section A vs. Section B). */
+.dwelling-type-beds-row td {
+  padding: 0.75rem 0.5rem 1rem 1.5rem;
+  background: #fafaf9;
+}
+
+.beds-subtable {
+  width: 100%;
+  border-collapse: collapse;
   color: #44403c;
 }
 
-.no-beds-detail {
-  margin: 0.4rem 0 0;
-  padding-left: 1rem;
+.beds-subtable th,
+.beds-subtable td {
+  text-align: left;
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  font-weight: 400;
+}
+
+.beds-subtable thead th {
   color: #78716c;
+}
+
+.no-beds-detail {
+  margin: 0;
+  color: #78716c;
+}
+
+.dwelling-type-table tfoot td {
+  padding-top: 0.75rem;
+  color: #78716c;
+  font-size: 0.8rem;
 }
 
 /* Suburb Finder */
