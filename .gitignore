@@ -5,6 +5,9 @@ __pycache__/
 
 # Database output
 data-pipeline/output/*.db*
+# ...except the built database itself: it is committed so a deploy needs only Node.
+# Recommit it after every pipeline rebuild (see the root README).
+!data-pipeline/output/hamilton.db
 
 .DS_Store
 

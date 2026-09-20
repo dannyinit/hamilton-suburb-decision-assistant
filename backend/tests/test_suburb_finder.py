@@ -15,11 +15,14 @@ Exits non-zero if any check fails, so it can still be wired into CI later.
 """
 
 import json
+import os
 import sys
 import urllib.request
 import urllib.parse
 
-BASE = "http://localhost:3001/api/suburb-finder"
+# Override to run the same checks against a deployed server, e.g.
+#   BASE_URL=https://<your-app>.onrender.com python3 backend/tests/test_suburb_finder.py
+BASE = os.environ.get("BASE_URL", "http://localhost:3001").rstrip("/") + "/api/suburb-finder"
 results_log = []
 
 def call(params):

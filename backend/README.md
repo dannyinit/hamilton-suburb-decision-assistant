@@ -40,17 +40,36 @@ backend/
 4. Server listens on `http://localhost:3001` by default (override with the `PORT`
    env var).
 
-**Prerequisite:** `data-pipeline/output/hamilton.db` must already exist — build it
-first by following the data-pipeline setup steps in [the root README](../README.md#setup).
-`db.js` fails fast on startup (`fileMustExist: true`) if it's missing, rather than
-silently creating an empty database.
+To run the whole app as one server, as it is deployed, build the frontend and start
+from the repo root: `npm run build && npm start` (see the root `package.json`).
+`DB_PATH` overrides where the database is read from.
+
+**Prerequisite:** `data-pipeline/output/hamilton.db` must exist. It is **committed to
+the repo**, so a fresh clone (or a deploy) needs only Node; after changing or re-running
+the pipeline, rebuild it by following the data-pipeline setup steps in
+[the root README](../README.md#setup) and **recommit the new file**. `db.js` fails fast
+on startup (`fileMustExist: true`) if it's missing, rather than silently creating an
+empty database.
 
 ## Endpoints
 
-### `GET /`
+### `GET /api`
 
 Returns a JSON summary of available endpoints — useful as a sanity check that the
-server is actually running.
+server is actually running. (This was `GET /` before the server also started
+serving the built frontend; `/` now returns the app itself.) Any other unknown
+`/api/...` path returns a JSON `404`.
+
+### `GET /` and client-side routes
+
+When the frontend has been built (`npm run build --prefix frontend`), the same
+process serves it: `index.html` for `/` and for any extension-less path that isn't
+under `/api` (so a reload or shared link to `/rental-price-check` works with
+`BrowserRouter`), and the fingerprinted files under `/assets/` with a one-year
+immutable cache. A missing file (e.g. a stale `/assets/x.js`) is a plain `404`. If
+`frontend/dist` doesn't exist — plain backend development, where vite serves the
+frontend and proxies `/api` here — `GET /` returns a JSON `404` saying so. Responses
+are gzip-compressed.
 
 ### `GET /api/health`
 
@@ -631,5 +650,8 @@ which is too long to skim in a demo. No parameters.
   ```
   python3 backend/tests/test_suburb_finder.py
   ```
+
+  Set `BASE_URL` (default `http://localhost:3001`) to run the same checks against a
+  deployed server, e.g. `BASE_URL=https://<app>.onrender.com python3 backend/tests/test_suburb_finder.py`.
 
   Exits non-zero if any check fails, so it can be wired into CI later.

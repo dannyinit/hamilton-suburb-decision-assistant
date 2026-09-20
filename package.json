@@ -1,0 +1,12 @@
+{
+  "name": "hamilton-suburb-decision-assistant",
+  "private": true,
+  "description": "Hamilton Suburb Decision Assistant: one Express server serving the API and the built React frontend, backed by a committed read-only SQLite database.",
+  "scripts": {
+    "build": "npm ci --prefix frontend && npm run build --prefix frontend && npm ci --prefix backend",
+    "start": "node backend/server.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}
