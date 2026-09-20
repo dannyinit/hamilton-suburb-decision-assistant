@@ -20,6 +20,8 @@ proposal: Rental Price Check and Suburb Finder.
 backend/
 ├── server.js                    # entry point: starts Express, mounts routes
 ├── db.js                        # shared read-only db connection
+├── lowSampleWarning.js          # shared "small sample" signal + wording (Rental Price Check and Suburb Finder)
+├── quarterLabel.js              # MBIE TimeFrame date -> "Q1 2026" / "Jan–Mar" labels
 ├── routes/
 │   ├── index.js                 # collects every feature's router
 │   ├── rentalPriceCheck.js      # GET /api/rental-price-check
@@ -82,7 +84,8 @@ behaviour is reachable from the UI.
 ### `GET /api/rental-price-check`
 
 Looks up the market rent for a suburb/dwelling type/bed count, with a two-tier
-fallback and a staleness warning when the data is old.
+fallback, a staleness warning when the data is old, and a breakdown table of every
+other dwelling type the suburb has data for.
 
 **Query parameters**
 
@@ -97,13 +100,99 @@ fallback and a staleness warning when the data is old.
 same dwelling type with `number_of_beds='ALL'` (`fallback_level: "dwelling_type"`,
 skipped if the requested beds were already `ALL`) → the suburb's overall
 `dwelling_type='ALL', number_of_beds='ALL'` row (`fallback_level: "full"`) → if even
-that's missing, `insufficient_data: true` with no numbers at all.
+that's missing, `insufficient_data: true` with no numbers at all. When a fallback
+happens the response also carries a generic `fallback_note`; the frontend builds its
+own, more specific banner from `requested_*` vs. the returned `dwelling_type` /
+`number_of_beds` instead of showing this one.
 
-**Staleness:** any row with `quarters_stale >= 1` gets a `staleness_warning`
-stating exactly how many quarters old it is — a much stricter threshold than Suburb
-Finder's 4 quarters (see the root README's "Consumption rules" section for why).
+#### Quarter labels
 
-**Example response** (exact match, rent supplied):
+MBIE's `TimeFrame` is a calendar quarter written as a date (`2026-01-01`), not a
+real day, so showing it raw implies precision the data doesn't have. Every
+user-facing mention of a quarter goes through [quarterLabel.js](quarterLabel.js):
+
+| field | example | where |
+|---|---|---|
+| `timeframe` | `"2026-01-01"` | primary result and every breakdown row — the raw ISO value, unchanged, for machine use |
+| `timeframe_label` | `"Q1 2026"` | primary result and every breakdown row |
+| `timeframe_months` | `"Jan–Mar"` | **primary result only** — one clarification where the reader is orienting, so "Q3" isn't mistaken for a July–June NZ fiscal quarter |
+
+**Assumption:** `TimeFrame` is treated as the *first* day of its quarter
+(`2026-01-01` = Jan–Mar 2026). MBIE doesn't document this; it's inferred from their
+own file label ("January 2020 to April 2026", whose first/last `TimeFrame` values
+are `2020-01-01` and `2026-04-01`) and from their release lag (the latest published
+quarter is a complete one). If it turns out to be wrong, `quarterLabel.js` is the
+only place to fix.
+
+#### Staleness
+
+Any row — the primary result or a breakdown row — with `quarters_stale >= 1` gets a
+`staleness_warning`, a much stricter threshold than Suburb Finder's 4 quarters (see
+the root README's "Consumption rules" section for why). The sentence names both
+what the data's quarter is and what it's older than:
+
+> This data is from Q1 2022, 16 quarters older than the most recent data available (Q1 2026).
+
+The reference quarter in that sentence is derived from the row itself (its own
+quarter plus `quarters_stale`), so the count and the quarter beside it can never
+disagree. "Most recent data available", not "latest MBIE release" — the database is
+a snapshot and may itself lag MBIE's newest publication.
+
+`stale_footnote` is a separate, shorter explanation (*"This data is older than the
+most recent data available (Q1 2026)."*) attached to the response **only when at
+least one breakdown row is stale**. Its quarter comes from `SELECT MAX(timeframe)
+FROM rent`, run on every request rather than cached or hardcoded, so it follows the
+data when the database is rebuilt (the server needs a restart to reopen the
+replaced file). Because it reflects the *table's* rows and not just the primary
+result, it can appear even when the primary result is current — see the example
+below.
+
+#### Low-sample warning
+
+Shared with Suburb Finder via [lowSampleWarning.js](lowSampleWarning.js): a row is
+flagged when `total_bonds <= 6`. MBIE suppresses selections with fewer than 5 bonds
+and applies fixed random rounding to base 3, so 6 is the smallest count that is ever
+published — the observed floor across the whole rent table (only 6, 9, 12, … occur),
+which is why the code's `<=` never needs to be `<`. The primary result carries
+`low_sample_warning` and a full-sentence `low_sample_note` (*"This figure is based on
+a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a
+rough indication only."*). Breakdown rows carry only the boolean, and the shared
+`low_sample_footnote` is attached **only when at least one breakdown row is flagged**,
+so a compact marker per row can point at one explanation instead of repeating the
+sentence.
+
+#### Dwelling-type breakdown
+
+`dwelling_type_breakdown` lists every specific dwelling type
+(`dwelling_type != 'ALL'`) the suburb genuinely has an all-beds row with a
+`median_rent` for — **including the one the primary result shows** (flagged
+`is_current: true` rather than filtered out, so it's a complete picture). Rows are
+ordered like the frontend's dropdown (Apartment, Boarding House, Flat, House, Room).
+
+| field | notes |
+|---|---|
+| `dwelling_type` | |
+| `is_current` | `true` for the dwelling type the primary result (after any fallback) displays |
+| `median_rent`, `total_bonds` | that dwelling type's all-beds row |
+| `low_sample_warning` | as above |
+| `timeframe`, `timeframe_label`, `quarters_stale`, `staleness_warning` | that row's *own* age — rows in one table routinely differ (a suburb's 2-bed row can be years older than its 1-bed row, because MBIE omits rows for thin quarters and each combination keeps its latest available quarter) |
+| `beds` | nested per-bed-count rows for this dwelling type: `number_of_beds`, `median_rent`, `total_bonds`, `low_sample_warning`, and the same four age fields. Ordered in MBIE's category order (not numeric — `15` precedes `5+`). May be empty |
+
+Rows with no `median_rent` and the separate NULL-beds category are excluded, as they
+are from the primary lookup. **Don't expect bed rows to sum to the all-beds row**:
+they can come from different quarters, and MBIE's base-3 rounding is applied to each
+row independently.
+
+For a suburb with no such rows (currently only Te Rapa South, whose one rent row is
+the overall ALL/ALL row), `dwelling_type_breakdown` is `[]` and neither footnote is
+attached. (Te Rapa North has no rent rows at all, so it gets the `insufficient_data`
+response instead, which has no breakdown field.)
+
+**Example response** (Flagstaff North, House, rent supplied). The primary result is
+current (`quarters_stale: 0`, `staleness_warning: null`), yet `stale_footnote` is
+present because two of the House bed rows in the breakdown are 2 quarters old —
+`stale_footnote` describes the table, not the primary result. The breakdown is
+truncated to the House row's first three bed rows and the Room row is omitted:
 
 ```json
 {
@@ -116,17 +205,80 @@ Finder's 4 quarters (see the root README's "Consumption rules" section for why).
   "median_rent": 755,
   "lower_quartile_rent": 699,
   "upper_quartile_rent": 793,
+  "total_bonds": 36,
+  "low_sample_warning": false,
+  "low_sample_note": null,
   "fallback_level": "none",
   "timeframe": "2026-01-01",
+  "timeframe_label": "Q1 2026",
+  "timeframe_months": "Jan–Mar",
   "quarters_stale": 0,
   "staleness_warning": null,
   "rent": 600,
-  "comparison": "Below market"
+  "comparison": "Below market",
+  "dwelling_type_breakdown": [
+    {
+      "dwelling_type": "House",
+      "is_current": true,
+      "median_rent": 755,
+      "total_bonds": 36,
+      "low_sample_warning": false,
+      "timeframe": "2026-01-01",
+      "timeframe_label": "Q1 2026",
+      "quarters_stale": 0,
+      "staleness_warning": null,
+      "beds": [
+        {
+          "number_of_beds": "1",
+          "median_rent": 750,
+          "total_bonds": 27,
+          "low_sample_warning": false,
+          "timeframe": "2026-01-01",
+          "timeframe_label": "Q1 2026",
+          "quarters_stale": 0,
+          "staleness_warning": null
+        },
+        {
+          "number_of_beds": "2",
+          "median_rent": 720,
+          "total_bonds": 6,
+          "low_sample_warning": true,
+          "timeframe": "2025-07-01",
+          "timeframe_label": "Q3 2025",
+          "quarters_stale": 2,
+          "staleness_warning": "This data is from Q3 2025, 2 quarters older than the most recent data available (Q1 2026)."
+        },
+        {
+          "number_of_beds": "3",
+          "median_rent": 680,
+          "total_bonds": 6,
+          "low_sample_warning": true,
+          "timeframe": "2025-07-01",
+          "timeframe_label": "Q3 2025",
+          "quarters_stale": 2,
+          "staleness_warning": "This data is from Q3 2025, 2 quarters older than the most recent data available (Q1 2026)."
+        }
+      ]
+    }
+  ],
+  "low_sample_footnote": "Based on a small sample (6 bonds — the smallest sample MBIE publishes); treat as a rough indication.",
+  "stale_footnote": "This data is older than the most recent data available (Q1 2026)."
 }
 ```
 
+`fallback_note` (present only when `fallback_level` is not `"none"`) and the
+`insufficient_data` response shape are covered in the fallback description above.
+
 See [test-examples.md](test-examples.md) for one ready-to-run example per case
-(exact match, both fallback tiers, NO_DATA, STALE, invalid input, rent comparison).
+(exact match, both fallback tiers, NO_DATA, STALE, empty breakdown, a stale
+breakdown row with a current primary result, invalid input, rent comparison).
+
+### `GET /api/rental-price-check-examples`
+
+A fixed list of example requests for demos, each as `{ description, url, result }`,
+where `result` is the live response computed in-process by the same function the
+real endpoint uses (no HTTP round-trip). Mirrors [test-examples.md](test-examples.md).
+No parameters.
 
 ### `GET /api/rental-price-check-bed-availability`
 
@@ -195,7 +347,7 @@ Each suburb's `lowest_rent` object (present on every entry in `results`, and on
 | `value` | the rent figure compared against `budget` |
 | `dwelling_type`, `number_of_beds` | which specific row `value` came from |
 | `total_bonds` | that row's sample size |
-| `low_sample_warning` | `true` when `total_bonds <= 6` — MBIE's own minimum publishable sample size, not an arbitrary cutoff. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` is only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (currently ~50/60 suburbs warned) |
+| `low_sample_warning` | `true` when `total_bonds <= 6` — the smallest sample MBIE ever publishes (it suppresses counts below 5 and rounds to base 3), not an arbitrary cutoff; see "Low-sample warning" under Rental Price Check. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` is only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (currently ~50/60 suburbs warned) |
 | `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false` |
 
 **This is deliberately a different figure from the `rent` criterion used for
@@ -300,7 +452,7 @@ included and 23 excluded):
         "number_of_beds": null,
         "total_bonds": 6,
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
     }
   ],
@@ -316,7 +468,7 @@ included and 23 excluded):
         "number_of_beds": "ALL",
         "total_bonds": 6,
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
     }
   ]
@@ -359,7 +511,7 @@ here the same way):
         "number_of_beds": null,
         "total_bonds": 6,
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
     }
   ],
@@ -375,12 +527,19 @@ here the same way):
         "number_of_beds": "ALL",
         "total_bonds": 6,
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — MBIE's own minimum reportable size) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
     }
   ]
 }
 ```
+
+### `GET /api/suburb-finder-examples`
+
+A fixed list of example Suburb Finder requests, each as `{ description, url }`.
+Unlike `/api/rental-price-check-examples` it deliberately carries no live `result`
+— one Suburb Finder response can hold up to 10 fully score-broken-down suburbs,
+which is too long to skim in a demo. No parameters.
 
 ## Testing
 
@@ -392,7 +551,8 @@ here the same way):
   parameters, one cached lookup, nothing to regress.
 - **Rental Price Check:** manual — see [test-examples.md](test-examples.md) for
   curl examples covering every case (exact match, both fallback tiers, NO_DATA,
-  STALE, invalid input, rent comparison).
+  STALE, empty breakdown, stale breakdown rows under a current primary result,
+  low-sample footnote, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
   [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 60 checks run
   against a live server (validation, optional destination, empty result set,

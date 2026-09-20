@@ -4,8 +4,10 @@
 // reason (a rent figure built on a thin MBIE sample), so it lives in one
 // place rather than two independently-maintained copies that could drift.
 //
-// Threshold is MBIE's own minimum publishable sample size (6 — anything
-// smaller and they suppress the row entirely), not an arbitrary cutoff.
+// Threshold is the smallest sample MBIE ever publishes, not an arbitrary
+// cutoff: MBIE suppresses selections with fewer than 5 bonds and applies
+// fixed random rounding to base 3 to the rest, so the smallest published
+// count is 6 (confirmed: no row anywhere in the raw data is below 6).
 // Confirmed against real data (see suburbFinder.js's git history): a
 // two-tier mild/strong design was tried first, but across all 60 CURRENT
 // suburbs a lowest_rent row's total_bonds is only ever 6, 9, 12, or 15 --

@@ -65,7 +65,7 @@ declared in the schema will silently not be checked.
 | dwelling_type | TEXT | ALL / Apartment / Boarding House / Flat / House / Room |
 | number_of_beds | TEXT, nullable | 'ALL', '0'..'9', '15', '5+', or NULL (a distinct MBIE category with real bond/rent data, not a duplicate of 'ALL') |
 | timeframe | TEXT | ISO date (`YYYY-MM-DD`) of the most recent quarter that has a row for this exact combination (MBIE omits rows outright when a quarter's sample is too small) |
-| quarters_stale | INTEGER | this row's `timeframe` vs. the global latest quarter, in quarters (0 = current) |
+| quarters_stale | INTEGER | this row's `timeframe` vs. the global latest quarter, in quarters (0 = current). Downstream code (the backend's stale footnote and staleness sentences) assumes that global latest quarter also appears as some row's `timeframe` in this table; that holds by construction, since each combination keeps its own latest quarter and the global latest is computed over the same Hamilton-filtered data |
 | median_rent, geometric_mean_rent, upper_quartile_rent, lower_quartile_rent | REAL | |
 | total_bonds, active_bonds | INTEGER | |
 | PK | (sa2_code, dwelling_type, number_of_beds) | |
