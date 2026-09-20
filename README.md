@@ -1,3 +1,84 @@
+# Hamilton Suburb Decision Assistant
+
+A web app that helps someone renting in Hamilton, New Zealand decide where to look: a
+**Suburb Finder** that ranks suburbs by rent, transport and distance to a chosen
+destination, and a **Rental Price Check** that looks up market rent for a suburb, dwelling
+type and bedroom count. There are no user accounts and nothing is ever written at
+runtime: the app reads a prebuilt, read-only SQLite database.
+
+It runs as **one Node process**: an Express server that serves both the API and the
+built React frontend.
+
+| Folder | What it is | Docs |
+|---|---|---|
+| `frontend/` | React + Vite single-page app | — |
+| `backend/` | Express API and the static-file server | [backend/README.md](backend/README.md) |
+| `data-pipeline/` | Python ETL that builds the SQLite database from the raw datasets | the rest of this file, from "Data Pipeline" below |
+
+## Running the app
+
+Needs Node 22.12 or newer (Node 24 works locally; the deployed version is pinned, see
+Deployment).
+
+- **As deployed (one server):** from the repo root, `npm run build && npm start`, then
+  open http://localhost:3001 (override the port with `PORT`). `npm run build` installs and
+  builds the frontend, then installs the backend.
+- **Development (hot reload):** in one terminal, `cd backend && npm install && npm start`;
+  in another, `cd frontend && npm install && npm run dev`. Vite proxies `/api` to the
+  backend on port 3001.
+- **Regression tests** (Suburb Finder, 79 checks; start the server first):
+  `python3 backend/tests/test_suburb_finder.py`.
+
+The database, `data-pipeline/output/hamilton.db`, is **committed to the repo**, so none of
+the above needs Python or the raw data.
+
+## Deployment (Render)
+
+The app is set up for [Render](https://render.com)'s free web service via the Blueprint in
+[render.yaml](render.yaml): one service that runs `npm run build` and then `npm start`,
+health-checked at `/api/health`, in the Singapore region (the closest to New Zealand).
+
+**Deploying**
+
+1. Push `master` to GitHub.
+2. In Render, sign in with GitHub, then **New → Blueprint**, pick this repository and
+   branch `master`; Render reads `render.yaml`. (If it asks for a payment method even for
+   the free plan, create a **New → Web Service** by hand with the same build command,
+   start command and health-check path instead.)
+3. Open the build log and check which Node version was used, then open
+   `https://<your-app>.onrender.com/api/health`.
+4. Smoke-test the live app with the regression suite:
+   `BASE_URL=https://<your-app>.onrender.com python3 backend/tests/test_suburb_finder.py`.
+
+With `autoDeployTrigger: commit`, every push to `master` redeploys.
+
+**Before a demo, warm the service up.** Render's free instances spin down after 15
+minutes without traffic and take about a minute to start again, so open the app (or
+`/api/health`) a minute or two beforehand. Free instances also have 512 MB of memory and
+0.1 CPU, and a monthly allowance of 750 instance hours; Render's filesystem is
+ephemeral, which doesn't matter here because the database ships with the repo. Current
+terms: https://render.com/docs/free.
+
+**After any pipeline rebuild, recommit `data-pipeline/output/hamilton.db`.** The
+database is normally gitignored (`data-pipeline/output/*.db*`) with an exception for this
+one file, because a deploy has to ship it. Re-running `scripts/build_hamilton_db.py`
+rewrites the file locally, but nothing changes on the deployed site until the new file is
+committed and pushed. Also re-derive the Suburb Finder's hardcoded normalisation
+thresholds if the data changes materially (see [backend/README.md](backend/README.md)).
+
+**Node version.** `render.yaml` pins `NODE_VERSION` to an exact release (currently
+22.23.2), tested with a from-scratch build and the full regression suite. Vite 8 needs
+Node 22.12 or newer, and an unbounded range would drift to newer major versions over
+time, so `engines` in the root `package.json` is bounded too (`>=22.12.0 <23`). Bump the
+pin deliberately and re-run the checks.
+
+**Data attribution.** Every dataset's licence requires credit, so the app shows a "Data
+sources" footer on every page ([DataSources.jsx](frontend/src/components/DataSources.jsx)).
+Keep it in sync with the Datasets list below whenever a source is added or its licence
+changes. Licences were confirmed against each publisher's own pages on 2026-09-21.
+
+---
+
 # Data Pipeline
 
 Scripts and raw data for the Hamilton Suburb Decision Assistant.
@@ -10,22 +91,25 @@ Raw data files are included directly in `raw/` for reproducibility (they were no
 ### 1. MBIE Rental Bond data
 - File: `mbie_rental_bond.csv`
 - Source: https://www.tenancy.govt.nz/about-tenancy-services/data-and-statistics/rental-bond-data/
-- Licence: Creative Commons Attribution 3.0 New Zealand
+- Licence: Creative Commons Attribution 3.0 New Zealand. The publisher asks that you credit "The Ministry of Business, Innovation and Employment" as the source.
 - Notes: Location Id is a Statistics NZ SA2 2019 area code. Exclude Location Id = -99 and NaN before suburb-level analysis.
 
 ### 2. Waikato GTFS bus stop data (BUSIT)
 - File: `bus_stops_hamilton.csv` (from the `BUS_STOP_HAMILTON` layer, NOT `BUS_ROUTE_HAMILTON`)
 - Source: https://data.waikatoregion.govt.nz:8443/ords/piplx/f?p=140:12:0::NO::P12_METADATA_ID:402
+- Licence: Creative Commons Attribution 4.0 International. Publisher's own wording: "© Waikato Regional Council 2022 Licensed under CC BY 4.0." The dataset page also carries a no-liability disclaimer.
 - Notes: x, y coordinates in NZTM2000 (EPSG:2193), metres. 1557 rows (one per stop-route pair), 1045 unique STOP_ID values, 21 routes. The `bus_stops` table is deduplicated by STOP_ID, but transport access is computed from the stop-route pairs, since it counts distinct routes.
 
 ### 3. Stats NZ SA2 2019 centroids
 - File: `sa2_centroids.csv`
 - Source: https://datafinder.stats.govt.nz/layer/98771-statistical-area-2-2019-centroid-inside/
+- Licence: Creative Commons Attribution 4.0 International (per its data.govt.nz catalogue entry); attribute Stats NZ.
 - Notes: includes both NZTM (EASTING/NORTHING) and WGS84 (LATITUDE/LONGITUDE) coordinates. NZTM used for distance calculations.
 
 ### 4. Stats NZ SA2 Higher Geographies 2019 (TA concordance)
 - File: `sa2_higher_geographies.csv`
 - Source: https://datafinder.stats.govt.nz/layer/98779-statistical-area-2-higher-geographies-2019-generalised/
+- Licence: Creative Commons Attribution 4.0 International (per its data.govt.nz catalogue entry); attribute Stats NZ.
 - Notes: used to correctly filter to the 62 SA2 areas belonging to Hamilton City (`TA2019_V1_00_NAME = "Hamilton City"`). Do NOT filter by suburb name string or the "(Hamilton City)" suffix, since only 7/62 suburbs carry that suffix.
 
 ### 5. Hamilton Lake outline (OpenStreetMap)

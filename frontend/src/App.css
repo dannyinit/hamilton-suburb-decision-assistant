@@ -626,3 +626,37 @@
   margin: 0.5rem 0 0;
   padding-left: 1.25rem;
 }
+
+/* Data-source attribution footer (see components/DataSources.jsx). Small and
+   muted like the other explanatory captions, but always visible. */
+
+.data-sources {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e7e5e4;
+  font-size: 0.8rem;
+  color: #78716c;
+}
+
+.data-sources-title {
+  margin: 0 0 0.4rem;
+  font-weight: 700;
+  color: #57534e;
+}
+
+.data-sources ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.data-sources li {
+  margin-bottom: 0.25rem;
+}
+
+.data-sources a {
+  color: #0e7490;
+}
+
+.data-sources-note {
+  margin: 0.6rem 0 0;
+}

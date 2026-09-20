@@ -1,5 +1,6 @@
 import { Link, Outlet } from 'react-router-dom';
 import NavBar from './components/NavBar';
+import DataSources from './components/DataSources';
 import './App.css';
 
 // Layout route: the app header and NavBar are always visible, the active
@@ -22,6 +23,7 @@ function App() {
       </header>
       <NavBar />
       <Outlet />
+      <DataSources />
     </div>
   );
 }
