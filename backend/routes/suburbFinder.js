@@ -16,8 +16,8 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // transport are flat constants; distance is 10% of each destination's own
 // full-population range, since the four destinations sit at genuinely
 // different distances from the city (confirmed against real geography
-// before being hardcoded here). Transport's 0.4 is likewise ~10% of its
-// full-population range (0.067–3.985 routes, so 0.392).
+// before being hardcoded here). Transport's 0.3 is likewise ~10% of its
+// full-population range (sqrt(avg_routes) 0.259–3.088, so 0.283).
 //
 // This guards a different scenario from ROUNDING_STEP below: it stops a
 // genuinely tight population (e.g. a heavily budget-narrowed `included`
@@ -26,10 +26,12 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // with a normally-sized `included` set this floor never actually engages
 // for rent, and for distance only at the 2-suburbs-left extreme for 2 of 4
 // destinations — it's a rare-edge-case safety net, not the mechanism doing
-// routine work. (That was measured before transport changed to walk-based
-// route reach; see TRANSPORT_THRESHOLD's own check below.)
+// routine work. Transport's floor was re-checked after it changed to walk-based
+// route reach: across all 205 $5-step budgets ($100–$1,200) leaving >= 2
+// suburbs, the survivors' transport scoring input never spans less than
+// ~1.8, so it doesn't engage either.
 const RENT_THRESHOLD = 50;
-const TRANSPORT_THRESHOLD = 0.4;
+const TRANSPORT_THRESHOLD = 0.3;
 const DISTANCE_THRESHOLDS = {
   'University of Waikato': 1000,
   'Transport Centre': 750,
@@ -48,14 +50,19 @@ const DISTANCE_THRESHOLDS = {
 // precision anywhere near that fine. 100m has no equivalent data-derived
 // answer (there's no natural "reporting bucket" the way rent has one) —
 // it's a judgment call, chosen as a city-block-scale unit well below the
-// ~750-1000m distance thresholds above. Transport (avg_routes_400m) is
-// rounded to 0.1 route: it's a mean over a 50m sampling grid, so it carries
-// sampling noise (halving the grid step moved it by at most 0.044, under
-// half of this step), and 0.1 is a judgment call in the same way distance's
-// 100m is — it leaves 30 distinct values across the 60 CURRENT suburbs.
+// ~750-1000m distance thresholds above. Transport (sqrt of
+// avg_routes_400m) is rounded to 0.02. The average is a mean over a 50m
+// sampling grid, so it carries sampling noise: halving the grid step moved it
+// by at most 0.063 routes (0.015 on the sqrt scale), and 0.02 is chosen so a
+// tie never spans more than that noise — at this step the largest average
+// gap between two tied suburbs is 0.045 routes. It's a judgment call, in the
+// same way distance's 100m is, and leaves 37 distinct values across the 60
+// CURRENT suburbs. A coarser 0.05 was tried first and dropped: it tied
+// suburbs up to 0.136 routes apart (Queenwood 2.83 / Beerescourt 2.97), about
+// double the noise and visible in the UI as "2.8 vs 3.0" scoring the same.
 const RENT_ROUNDING_STEP = 5;
 const DISTANCE_ROUNDING_STEP = 100;
-const TRANSPORT_ROUNDING_STEP = 0.1;
+const TRANSPORT_ROUNDING_STEP = 0.02;
 
 function roundTo(value, step) {
   return Math.round(value / step) * step;
@@ -362,11 +369,16 @@ function computeSuburbFinder(query) {
     reverse: true, // cost: lower rent is better
   });
   const transportScores = normaliseCriterion(included, {
-    // Rounded for scoring only — score_breakdown below shows the raw
-    // avg_routes_400m. Higher is better; walk coverage isn't scored
-    // separately, since points with no route in range already count as 0
-    // routes in this average.
-    getValue: (s) => roundTo(s.avg_routes_400m, TRANSPORT_ROUNDING_STEP),
+    // Scored as sqrt(avg_routes_400m) — a deliberate judgment call (no
+    // evidence supports the curve's shape; see build_hamilton_db.py) that
+    // compresses the scale so the CBD doesn't flatten everyone else, while
+    // staying strictly increasing: a higher displayed average never scores
+    // lower (only rounding to TRANSPORT_ROUNDING_STEP can tie near-equal
+    // averages). score_breakdown below shows the plain average (value), from
+    // which normalised_score can be reproduced. Walk coverage isn't scored
+    // separately: points with no route in range already count as 0 in the
+    // average.
+    getValue: (s) => roundTo(Math.sqrt(s.avg_routes_400m), TRANSPORT_ROUNDING_STEP),
     threshold: TRANSPORT_THRESHOLD,
     reverse: false, // benefit: more routes reachable is better
   });

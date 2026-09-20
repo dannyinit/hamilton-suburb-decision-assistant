@@ -88,7 +88,7 @@ declared in the schema will silently not be checked.
 |---|---|---|
 | sa2_code | INTEGER PK FK→suburbs | |
 | walk_coverage_400m | REAL | share (0–1) of the suburb's land within 400m of any bus stop (straight-line; stops counted city-wide). Returned by the API for consumers; not shown in the UI or scored (it's already reflected in `avg_routes_400m`) |
-| avg_routes_400m | REAL | mean number of distinct bus routes with a stop within 400m, over a 50m grid of points across the suburb's land, each point capped at 4 routes. Points with no stop in range count 0, so this already reflects coverage. This is the transport scoring input |
+| avg_routes_400m | REAL | plain mean number of distinct bus routes with a stop within 400m, over a 50m grid of points across the suburb's land (uncapped). Points with no stop in range count 0, so this already reflects coverage. Shown in the UI, and the basis of the transport score: the backend scores √`avg_routes_400m`, a judgment call, not a finding (no evidence supports its shape); it compresses the scale so the CBD's ~9.5 routes doesn't flatten the rest, while being strictly increasing, so a higher average never scores lower. Always `≥ walk_coverage_400m` |
 
 Both columns come from sampling each suburb's Stats NZ polygon (not its centroid, which can
 land somewhere unrepresentative — Hamilton Lake's sits on the lake). Lake water is excluded

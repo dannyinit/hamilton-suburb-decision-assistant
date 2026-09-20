@@ -28,14 +28,22 @@ OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 DB_PATH = OUTPUT_DIR / "hamilton.db"
 
 # Transport access: sample each suburb's polygon on a regular grid, and at every point count the
-# distinct bus routes with a stop within WALK_RADIUS_M. A suburb's walk coverage is the share of
-# points with at least one route; its route reach is the mean number of routes per point, capped at
-# ROUTE_CAP per point (going from 1 to 2 routes matters far more than from 8 to 9, and uncapped the
-# CBD's ~10 would squash every other suburb into the bottom of the scale). Points with no route in
-# range count as 0 routes, so coverage is already reflected in the average.
+# distinct bus routes with a stop within WALK_RADIUS_M. Two per-suburb figures come from those points:
+#   - walk_coverage: the share of points with at least one route.
+#   - avg_routes: the plain mean routes per point. Points with no route in range count as 0, so
+#     unserved land lowers it.
+# The transport SCORE is derived from avg_routes by the backend as sqrt(avg_routes) (then rounded and
+# min-max normalised). The square root is a JUDGMENT CALL, not a finding: no ridership data or
+# planning standard was found supporting any particular shape. It compresses the scale so the CBD's
+# ~9.5 routes doesn't flatten every other suburb into the bottom of it (uncapped, the median suburb
+# sits 20% of the way up the range; with sqrt, 41%), while being strictly increasing, so a higher
+# average routes count never scores lower. It is applied to the suburb's average, not to each point
+# before averaging: that per-point variant was tried and dropped because it also rewarded even
+# spread over concentrated pockets, so a suburb with a higher displayed average could score the
+# same or lower. A hard cap of 4 per point was tried first and dropped: it scored 9 routes the same
+# as 4.
 WALK_RADIUS_M = 400
 GRID_STEP_M = 50
-ROUTE_CAP = 4
 # Build-time sanity check: sampled area (points x cell area) must land within this fraction of the
 # suburb's Stats NZ land area, which catches a wrong projection, a bad polygon or a mis-applied mask.
 LAND_AREA_TOLERANCE = 0.05
@@ -245,7 +253,8 @@ def compute_transport_access(
 ) -> pd.DataFrame:
     """
     Per suburb: walk_coverage_400m (share of the suburb's land within radius_m of any bus stop) and
-    avg_routes_400m (mean distinct routes within radius_m, capped at ROUTE_CAP per point). Stops are
+    avg_routes_400m (mean distinct routes within radius_m; displayed, and the basis of the transport
+    score, see above). Stops are
     counted city-wide, whichever suburb they sit in.
     """
     stops_by_route = [g[["easting", "northing"]].to_numpy() for _, g in stop_routes.groupby("route_id")]
@@ -264,10 +273,14 @@ def compute_transport_access(
             dy = points[:, 1][:, None] - stops[:, 1][None, :]
             routes_in_reach += ((dx**2 + dy**2) <= radius_m**2).any(axis=1)
 
-        rows.append((sa2_code, float((routes_in_reach >= 1).mean()), float(np.minimum(routes_in_reach, ROUTE_CAP).mean())))
+        rows.append((sa2_code, float((routes_in_reach >= 1).mean()), float(routes_in_reach.mean())))
 
     out = pd.DataFrame(rows, columns=["sa2_code", "walk_coverage_400m", "avg_routes_400m"])
-    assert out["walk_coverage_400m"].between(0, 1).all() and out["avg_routes_400m"].between(0, ROUTE_CAP).all()
+    # Hold by construction, so a violation means a bug: a covered point has >= 1 route, so the
+    # average is at least the coverage; and no point can have more routes than exist.
+    assert out["walk_coverage_400m"].between(0, 1).all()
+    assert (out["avg_routes_400m"] >= out["walk_coverage_400m"] - 1e-9).all()
+    assert out["avg_routes_400m"].max() <= len(stops_by_route)
     return out.round({"walk_coverage_400m": 4, "avg_routes_400m": 4})
 
 

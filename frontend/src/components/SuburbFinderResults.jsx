@@ -23,15 +23,19 @@ function formatDistance(metres) {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
-// transport.value is the average number of distinct bus routes within a 400m
-// walk of a point in the suburb (capped at 4 per point) — the figure actually
-// scored. 400m at a normal pace is about 5 minutes, which reads more
-// naturally than a bare distance. walk_coverage (also in the response) is
+// transport.value is the plain average number of distinct bus routes within a
+// 400m walk of a point in the suburb, uncapped — shown as-is, so a busy central
+// suburb honestly reads ~9.5. The score is the square root of this same figure
+// (a judgment call that compresses the scale so the CBD doesn't flatten
+// everyone else, while staying strictly increasing: a higher number never
+// scores lower; see backend/README.md), so what's shown and what's scored
+// always agree on order. 400m at a normal pace is about 5 minutes, which reads
+// more naturally than a bare distance. walk_coverage (also in the response) is
 // deliberately not shown: it's already folded into value (points with no
 // stop in range count 0), and showing it would offer users a second, unscored
 // signal for "is this suburb good on transport". The title repeats the
 // legend's explanation for hover; touch users get it from the legend.
-const TRANSPORT_EXPLANATION = "Average across the suburb's area of how many different bus routes have a stop within a 5-minute walk (400m), counting at most 4 per point.";
+const TRANSPORT_EXPLANATION = "Average across the suburb's area of how many different bus routes have a stop within a 5-minute walk (400m). The score gives each extra route a little less credit than the last, but a higher number never scores lower.";
 
 function formatTransport({ value }) {
   const rounded = value.toFixed(1);
@@ -193,7 +197,7 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
         Each suburb below shows two rent figures: Median Rent (used to rank suburbs) and Cheapest option found (a specific dwelling type that fits your budget, used only to decide whether to include the suburb — not a second rank-worthy estimate).
       </p>
       <p className="suburb-ranking-legend">
-        Transport: from a typical point in the suburb, roughly how many different bus routes have a stop within a 5-minute walk (400m in a straight line). It's an average across the suburb's area, counting at most 4 routes per point, so a suburb with areas far from any stop scores lower.
+        Transport: from a typical point in the suburb, roughly how many different bus routes have a stop within a 5-minute walk (400m in a straight line). It's an average across the suburb's area, so a suburb with areas far from any stop scores lower. The score gives each extra route a little less credit than the last, so having several routes helps, but a fifth adds less than a second; a higher number never scores lower.
       </p>
 
       <ol className="suburb-ranking">

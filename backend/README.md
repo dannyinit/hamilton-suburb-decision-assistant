@@ -379,16 +379,41 @@ walk (straight-line; stops are counted city-wide, whichever suburb they sit in).
 
 | field | notes |
 |---|---|
-| `value` | **the scored figure**: mean number of distinct routes reachable within 400m across the suburb's points, with each point capped at 4 routes (going from 1 to 2 routes matters far more than from 8 to 9, and uncapped the CBD's ~10 would squash every other suburb into the bottom of the scale). Points with no stop in range count as 0, so unserved land lowers it — coverage is already inside this number |
-| `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Returned for API consumers, not shown in the UI or scored separately — it's already reflected in `value`, and the UI deliberately shows only one transport signal |
+| `value` | the plain mean number of distinct routes within a 400m walk, across the suburb's points — **uncapped, shown to users** (the busiest suburbs are ~9.5). Points with no stop in range count as 0, so unserved land lowers it. The score is derived from this alone: `normalised_score` can be reproduced as the min-max normalisation of √`value`, rounded to 0.02 |
+| `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Returned for API consumers, not shown in the UI or scored separately — it's already reflected in `value` (uncovered points count 0), and the UI deliberately shows only one transport signal. Always `≤ value`: a covered point has at least one route |
 | `normalised_score` | as for the other criteria |
 
+**The square root is a judgment call, not a finding.** No ridership data or planning
+standard was found supporting any particular shape for how much extra routes are worth
+(the 400m radius, by contrast, does match NZTA/Waka Kotahi's ~5-minute-walk guidance).
+The score is `√value`, applied to the suburb's *average*, because it compresses the
+scale so the CBD's ~9.5 routes doesn't flatten every other suburb into the bottom of it
+(uncapped, the median suburb sits 20% of the way up the range; with √, 41%) while being
+**strictly increasing: a suburb with a higher displayed average never scores lower**
+(rounding to 0.02 can tie near-equal averages, never reverse them). It's also easy to
+state ("four times the routes counts as double"). Two earlier variants were tried and
+dropped:
+
+- **A hard cap of 4 routes per point** scored a point with 9 routes the same as one
+  with 4, and collapsed a real ~49% gap between Chartwell and Rototuna Central to a
+  near-tie.
+- **√ applied per point before averaging** had no ceiling, but it also rewarded evenly
+  spread service over concentrated pockets, so Whitiora (4.25 routes on average, but
+  routes concentrated in one part of it) scored the same as Rototuna Central (3.84,
+  even 3–5 everywhere) — a higher displayed number tying a lower one, which users
+  could see and couldn't explain.
+
+**Consequence: dead zones count only through the average.** Rototuna North (no stop in
+reach across ~36% of its area) and Pukete East (fully covered) both average ~2.0 routes
+and therefore score the same on transport, even though the former has areas with no
+service at all. That is the price of monotonicity, and it's deliberate: a higher
+displayed average is what the score follows.
+
 This replaced a count of stops within 500m of the suburb's centroid, which depended
-heavily on where the centroid happened to land (Hamilton Lake's sits on the lake
-itself, 426m from its nearest stop, and scored 2 stops despite 21 stops inside the
-suburb). `transport.value` therefore changed meaning: it used to be a stop count and
-is now an average route count (`0`–`4`). Hamilton Lake's polygon includes the lake,
-which no bus can serve, so the lake is masked out of the sampling using an
+heavily on where the centroid happened to land (Hamilton Lake's sits on the lake itself, 426m from its nearest stop, and scored 2 stops despite
+21 stops inside the suburb). `transport.value` therefore changed meaning: it used to
+be a stop count and is now an average route count. Hamilton Lake's polygon includes the
+lake, which no bus can serve, so the lake is masked out of the sampling using an
 OpenStreetMap outline (see the root README's dataset 5); other suburbs' water is
 negligible. `value` measures route *variety*, not service frequency — there is no
 timetable data.
@@ -399,8 +424,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
 `lowest_rent` — see "Budget filtering" above for why the two are kept separate:
 
 - Each criterion is min-max normalised to `[0,1]`. Rent and distance are cost
-  criteria (reversed: lower is better); transport (average routes reachable on
-  foot, see "Transport" below) is a benefit criterion (higher is better).
+  criteria (reversed: lower is better); transport (route reach, see "Transport" below) is a benefit criterion (higher is better).
 - **Exact tie** (every surviving suburb has the identical value on a criterion):
   `0.5` for all — deliberately neutral, not "best" or "worst".
 - **Otherwise**, normalisation divides by `max(actual range, threshold)` — a
@@ -412,7 +436,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   | criterion | threshold |
   |---|---|
   | rent | $50 |
-  | transport (average routes within a 400m walk) | 0.4 routes |
+  | transport (√ of average routes within a 400m walk) | 0.3 |
   | distance — University of Waikato | 1000m |
   | distance — Transport Centre | 750m |
   | distance — The Base | 940m |
@@ -425,14 +449,15 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   Confirmed against real data across every $5-step budget: with a normally-sized
   survivor set, this floor never actually engages for rent, and for distance only
   at the 2-suburbs-left extreme for 2 of the 4 destinations — it's a
-  rare-edge-case safety net, not a mechanism doing routine work. Transport's 0.4
-  (10% of its 0.067–3.985 full-population range) was re-checked after the switch to
-  route reach: across all 205 $5-step budgets from $100 to $1,200 that leave at
-  least 2 suburbs, the surviving suburbs' transport values never span less than
-  ~2.1 routes, so it doesn't engage either.
+  rare-edge-case safety net, not a mechanism doing routine work. Transport's 0.3
+  (~10% of √`value`'s 0.259–3.088 full-population range, so 0.283) was re-checked
+  after each change to the measure: across all 205 $5-step budgets from $100 to
+  $1,200 that leave at least 2 suburbs, the surviving suburbs' rounded transport
+  scoring input never spans less than 1.8 (the tightest case is a $180 budget with 2
+  survivors), so it doesn't engage either.
 
 - **Rent, distance and transport are also rounded before scoring** — to the nearest
-  $5 for rent, nearest 100m for distance, nearest 0.1 route for transport — so two suburbs closer together than the data's
+  $5 for rent, nearest 100m for distance, nearest 0.02 of √(average routes) for transport — so two suburbs closer together than the data's
   real precision score identically instead of being ranked apart on noise. This is
   a different fix from the threshold floor above: the floor protects against a
   *whole population* being too tightly clustered, while rounding protects against
@@ -443,10 +468,14 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   metre, an artifact of computing straight-line distance from an SA2 centroid, with
   no natural "reporting bucket" the way rent has one) — it's a judgment call, chosen
   as a city-block-scale unit well below the distance thresholds above. Transport's
-  0.1 step is likewise a judgment call: `avg_routes_400m` is a mean over a 50m
-  sampling grid, so it carries sampling noise (halving the grid step moved it by
-  at most 0.044, under half the step), and 0.1 route leaves 30 distinct values across
-  the 60 `CURRENT` suburbs. Only the scoring input is rounded —
+  0.02 step is likewise a judgment call: the average is a mean over a 50m sampling
+  grid, so it carries sampling noise (halving the grid step moved it by at most 0.063
+  routes, 0.015 on the √ scale), and 0.02 is chosen so a tie never spans more than that
+  noise — the largest gap between two tied suburbs' averages is 0.045 routes. It
+  leaves 37 distinct values across the 60 `CURRENT` suburbs. A coarser 0.05 was tried
+  first and dropped: it tied suburbs up to 0.136 routes apart (Queenwood 2.83 and
+  Beerescourt 2.97 scored the same), about double the noise, and visible in the UI as
+  "2.8 vs 3.0" tying. Only the scoring input is rounded —
   `score_breakdown.rent.value`/`distance.value`/`transport.value` still show the
   raw figure, and `lowest_rent` (the budget hard constraint) is
   never rounded, since it's a boundary check, not a normalised score.
@@ -468,10 +497,10 @@ included and 23 excluded):
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.7552,
+      "overall_score": 0.7732,
       "score_breakdown": {
         "rent": { "value": 400, "normalised_score": 0.8537 },
-        "transport": { "value": 3.8233, "walk_coverage": 0.9784, "normalised_score": 0.9459 },
+        "transport": { "value": 9.4935, "walk_coverage": 0.9784, "normalised_score": 1 },
         "distance": { "value": 5982.44, "normalised_score": 0.4659 }
       },
       "lowest_rent": {
@@ -511,8 +540,8 @@ above.
 **Example response, no destination** (same budget, `destination` omitted — note
 the re-normalised `weights_used`, the two-key `score_breakdown`, and that
 `lowest_rent` is unaffected by destination since it's a hard-constraint concern,
-not a scoring one; the ranking and `overall_score` differ from the example above
-because distance no longer factors in. `excluded` is the same 23 entries as the
+not a scoring one; `overall_score` (and the order further down the list) differs from
+the example above because distance no longer factors in. `excluded` is the same 23 entries as the
 example above — hard constraints don't depend on destination — just truncated
 here the same way):
 
@@ -526,20 +555,20 @@ here the same way):
   "results": [
     {
       "rank": 1,
-      "sa2_code": 179900,
-      "sa2_name": "Greensboro",
-      "overall_score": 0.9325,
+      "sa2_code": 179400,
+      "sa2_name": "Hamilton Central",
+      "overall_score": 0.9269,
       "score_breakdown": {
-        "rent": { "value": 340, "normalised_score": 1 },
-        "transport": { "value": 3.4759, "walk_coverage": 1, "normalised_score": 0.8649 }
+        "rent": { "value": 400, "normalised_score": 0.8537 },
+        "transport": { "value": 9.4935, "walk_coverage": 0.9784, "normalised_score": 1 }
       },
       "lowest_rent": {
-        "value": 263,
-        "dwelling_type": "Apartment",
-        "number_of_beds": "1",
-        "total_bonds": 9,
-        "low_sample_warning": false,
-        "low_sample_note": null
+        "value": 125,
+        "dwelling_type": "Boarding House",
+        "number_of_beds": null,
+        "total_bonds": 6,
+        "low_sample_warning": true,
+        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
     }
   ],
@@ -582,10 +611,10 @@ which is too long to skim in a demo. No parameters.
   STALE, empty breakdown, stale breakdown rows under a current primary result,
   low-sample footnote, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 73 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 79 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
-  low-coverage suburbs, transport route reach (including the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
+  low-coverage suburbs, transport route reach (including monotonicity and the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
   — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
   documented 50/60 warned split, and a "smoking gun" check that a suburb is
   actually included by its `lowest_rent` and not its `median_rent` — and the
