@@ -424,7 +424,8 @@ The rent criterion here is always the suburb-wide `median_rent`, never
 `lowest_rent` — see "Budget filtering" above for why the two are kept separate:
 
 - Each criterion is min-max normalised to `[0,1]`. Rent and distance are cost
-  criteria (reversed: lower is better); transport (route reach, see "Transport" below) is a benefit criterion (higher is better).
+  criteria (reversed: lower is better); transport (√ of the average routes within a
+  400m walk, see "Transport" below) is a benefit criterion (higher is better).
 - **Exact tie** (every surviving suburb has the identical value on a criterion):
   `0.5` for all — deliberately neutral, not "best" or "worst".
 - **Otherwise**, normalisation divides by `max(actual range, threshold)` — a
@@ -444,7 +445,12 @@ The rent criterion here is always the suburb-wide `median_rent`, never
 
   (Distance uses a different threshold per destination — 10% of that destination's
   own full-population distance range — rather than one flat metre value, since the
-  four destinations sit at genuinely different distances from the city.)
+  four destinations sit at genuinely different distances from the city. Transport's
+  0.3 is derived the same way: 10% of √`value`'s 0.259–3.088 range is 0.283, rounded
+  up. Rent's $50 is **not** derived that way — it's a hand-chosen flat constant (10% of
+  the $340–$760 range of suburb-wide median rents would be $42). All of these are
+  hardcoded from the current data, so they need re-deriving if the database is rebuilt
+  with materially different data.)
 
   Confirmed against real data across every $5-step budget: with a normally-sized
   survivor set, this floor never actually engages for rent, and for distance only
