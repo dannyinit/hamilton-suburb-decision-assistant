@@ -371,14 +371,36 @@ key with a null value). If both `rent_weight` and `transport_weight` are `0`
 with no destination, the `400` error message names only those two params, not
 `distance_weight`.
 
+**Transport: walk-based route reach, not a stop count.** Each suburb's transport
+figure is computed in the data pipeline by sampling its Stats NZ polygon on a 50m
+grid and, at every point, counting the distinct bus routes with a stop within a 400m
+walk (straight-line; stops are counted city-wide, whichever suburb they sit in).
+`score_breakdown.transport` then carries:
+
+| field | notes |
+|---|---|
+| `value` | **the scored figure**: mean number of distinct routes reachable within 400m across the suburb's points, with each point capped at 4 routes (going from 1 to 2 routes matters far more than from 8 to 9, and uncapped the CBD's ~10 would squash every other suburb into the bottom of the scale). Points with no stop in range count as 0, so unserved land lowers it — coverage is already inside this number |
+| `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Context for the user; **not scored separately**, since it's already reflected in `value` |
+| `normalised_score` | as for the other criteria |
+
+This replaced a count of stops within 500m of the suburb's centroid, which depended
+heavily on where the centroid happened to land (Hamilton Lake's sits on the lake
+itself, 426m from its nearest stop, and scored 2 stops despite 21 stops inside the
+suburb). `transport.value` therefore changed meaning: it used to be a stop count and
+is now an average route count (`0`–`4`). Hamilton Lake's polygon includes the lake,
+which no bus can serve, so the lake is masked out of the sampling using an
+OpenStreetMap outline (see the root README's dataset 5); other suburbs' water is
+negligible. `value` measures route *variety*, not service frequency — there is no
+timetable data.
+
 **Scoring**, applied only across the suburbs that survive both hard constraints
 (not all 62 — ranking should reflect relative comparison among viable options).
 The rent criterion here is always the suburb-wide `median_rent`, never
 `lowest_rent` — see "Budget filtering" above for why the two are kept separate:
 
 - Each criterion is min-max normalised to `[0,1]`. Rent and distance are cost
-  criteria (reversed: lower is better); transport (bus stop count) is a benefit
-  criterion (higher is better).
+  criteria (reversed: lower is better); transport (average routes reachable on
+  foot, see "Transport" below) is a benefit criterion (higher is better).
 - **Exact tie** (every surviving suburb has the identical value on a criterion):
   `0.5` for all — deliberately neutral, not "best" or "worst".
 - **Otherwise**, normalisation divides by `max(actual range, threshold)` — a
@@ -390,7 +412,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   | criterion | threshold |
   |---|---|
   | rent | $50 |
-  | transport (bus stops within 500m) | 3 stops |
+  | transport (average routes within a 400m walk) | 0.4 routes |
   | distance — University of Waikato | 1000m |
   | distance — Transport Centre | 750m |
   | distance — The Base | 940m |
@@ -401,12 +423,16 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   four destinations sit at genuinely different distances from the city.)
 
   Confirmed against real data across every $5-step budget: with a normally-sized
-  survivor set, this floor never actually engages for rent or transport, and for
-  distance only at the 2-suburbs-left extreme for 2 of the 4 destinations — it's a
-  rare-edge-case safety net, not a mechanism doing routine work.
+  survivor set, this floor never actually engages for rent, and for distance only
+  at the 2-suburbs-left extreme for 2 of the 4 destinations — it's a
+  rare-edge-case safety net, not a mechanism doing routine work. Transport's 0.4
+  (10% of its 0.067–3.985 full-population range) was re-checked after the switch to
+  route reach: across all 205 $5-step budgets from $100 to $1,200 that leave at
+  least 2 suburbs, the surviving suburbs' transport values never span less than
+  ~2.1 routes, so it doesn't engage either.
 
-- **Rent and distance are also rounded before scoring** — to the nearest $5 for
-  rent, nearest 100m for distance — so two suburbs closer together than the data's
+- **Rent, distance and transport are also rounded before scoring** — to the nearest
+  $5 for rent, nearest 100m for distance, nearest 0.1 route for transport — so two suburbs closer together than the data's
   real precision score identically instead of being ranked apart on noise. This is
   a different fix from the threshold floor above: the floor protects against a
   *whole population* being too tightly clustered, while rounding protects against
@@ -416,11 +442,13 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   data-derived answer (adjacent suburbs' `distance_m` can differ by fractions of a
   metre, an artifact of computing straight-line distance from an SA2 centroid, with
   no natural "reporting bucket" the way rent has one) — it's a judgment call, chosen
-  as a city-block-scale unit well below the distance thresholds above. Transport
-  (`bus_stop_count`) is deliberately not rounded: it's already a small integer
-  count, and a difference of 1 stop is a real difference, not measurement noise.
-  Only the scoring input is rounded — `score_breakdown.rent.value`/`distance.value`
-  still show the raw figure, and `lowest_rent` (the budget hard constraint) is
+  as a city-block-scale unit well below the distance thresholds above. Transport's
+  0.1 step is likewise a judgment call: `avg_routes_400m` is a mean over a 50m
+  sampling grid, so it carries sampling noise (halving the grid step moved it by
+  at most 0.044, under half the step), and 0.1 route leaves 30 distinct values across
+  the 60 `CURRENT` suburbs. Only the scoring input is rounded —
+  `score_breakdown.rent.value`/`distance.value`/`transport.value` still show the
+  raw figure, and `lowest_rent` (the budget hard constraint) is
   never rounded, since it's a boundary check, not a normalised score.
 
 - `overall_score` is the weights-normalised sum of the three per-criterion scores
@@ -440,10 +468,10 @@ included and 23 excluded):
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.7732,
+      "overall_score": 0.7552,
       "score_breakdown": {
         "rent": { "value": 400, "normalised_score": 0.8537 },
-        "transport": { "value": 28, "normalised_score": 1 },
+        "transport": { "value": 3.8233, "walk_coverage": 0.9784, "normalised_score": 0.9459 },
         "distance": { "value": 5982.44, "normalised_score": 0.4659 }
       },
       "lowest_rent": {
@@ -498,20 +526,20 @@ here the same way):
   "results": [
     {
       "rank": 1,
-      "sa2_code": 179400,
-      "sa2_name": "Hamilton Central",
-      "overall_score": 0.9269,
+      "sa2_code": 179900,
+      "sa2_name": "Greensboro",
+      "overall_score": 0.9325,
       "score_breakdown": {
-        "rent": { "value": 400, "normalised_score": 0.8537 },
-        "transport": { "value": 28, "normalised_score": 1 }
+        "rent": { "value": 340, "normalised_score": 1 },
+        "transport": { "value": 3.4759, "walk_coverage": 1, "normalised_score": 0.8649 }
       },
       "lowest_rent": {
-        "value": 125,
-        "dwelling_type": "Boarding House",
-        "number_of_beds": null,
-        "total_bonds": 6,
-        "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "value": 263,
+        "dwelling_type": "Apartment",
+        "number_of_beds": "1",
+        "total_bonds": 9,
+        "low_sample_warning": false,
+        "low_sample_note": null
       }
     }
   ],
@@ -554,14 +582,14 @@ which is too long to skim in a demo. No parameters.
   STALE, empty breakdown, stale breakdown rows under a current primary result,
   low-sample footnote, invalid input, rent comparison).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 60 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 73 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
-  zero-bus-stop suburbs, determinism, zero-weight criteria, `lowest_rent`
+  low-coverage suburbs, transport route reach (including the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
   — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
   documented 50/60 warned split, and a "smoking gun" check that a suburb is
   actually included by its `lowest_rent` and not its `median_rent` — and the
-  rent/distance rounding-based tie behavior, with real suburbs confirmed to
+  rent/distance/transport rounding-based tie behavior, with real suburbs confirmed to
   tie within a rounding bucket and not tie across one). Start the server
   first, then:
 

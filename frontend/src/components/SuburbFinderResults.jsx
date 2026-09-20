@@ -23,8 +23,21 @@ function formatDistance(metres) {
   return `${(metres / 1000).toFixed(1)} km`;
 }
 
-function formatBusStops(count) {
-  return `${count} bus stop${count === 1 ? '' : 's'} within 500m`;
+// transport.value is the average number of distinct bus routes within a 400m
+// walk (capped at 4 per point), the figure actually scored; walk_coverage is
+// the share of the suburb within 400m of any stop — context only, not
+// scored separately (see backend/README.md's "Transport" section). Two
+// lines rather than one long sentence: the cell is narrow next to the
+// score meter, and the scored number reads first.
+function formatTransport({ value, walk_coverage }) {
+  return (
+    <>
+      {value.toFixed(1)} routes reachable on average
+      <span className="score-breakdown-detail">
+        {Math.round(walk_coverage * 100)}% within a 400m walk of a stop
+      </span>
+    </>
+  );
 }
 
 // Order + formatting for each score_breakdown criterion. 'distance' is
@@ -42,9 +55,9 @@ function formatBusStops(count) {
 // non-null, since the row itself doesn't exist without one.
 function getCriteria(destination) {
   return [
-    { key: 'rent', label: 'Median Rent', formatValue: (v) => `$${v}/week` },
-    { key: 'transport', label: 'Transport', formatValue: formatBusStops },
-    { key: 'distance', label: `Distance to ${destination}`, formatValue: formatDistance },
+    { key: 'rent', label: 'Median Rent', formatValue: ({ value }) => `$${value}/week` },
+    { key: 'transport', label: 'Transport', formatValue: formatTransport },
+    { key: 'distance', label: `Distance to ${destination}`, formatValue: ({ value }) => formatDistance(value) },
   ];
 }
 
@@ -73,12 +86,12 @@ function ScoreBreakdown({ breakdown, destination }) {
     <table className="score-breakdown">
       <tbody>
         {criteria.filter((criterion) => breakdown[criterion.key]).map((criterion) => {
-          const { value, normalised_score } = breakdown[criterion.key];
+          const entry = breakdown[criterion.key];
           return (
             <tr key={criterion.key}>
               <th scope="row">{criterion.label}</th>
-              <td>{criterion.formatValue(value)}</td>
-              <td><ScoreMeter score={normalised_score} /></td>
+              <td>{criterion.formatValue(entry)}</td>
+              <td><ScoreMeter score={entry.normalised_score} /></td>
             </tr>
           );
         })}
@@ -176,6 +189,9 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
           search. */}
       <p className="suburb-ranking-legend">
         Each suburb below shows two rent figures: Median Rent (used to rank suburbs) and Cheapest option found (a specific dwelling type that fits your budget, used only to decide whether to include the suburb — not a second rank-worthy estimate).
+      </p>
+      <p className="suburb-ranking-legend">
+        Transport is the average number of bus routes you could walk to (within 400m) from a point in the suburb, counting up to 4 per point — so it rewards having more than one route, and suburbs with land far from any stop score lower. The percentage beside it is how much of the suburb is within a 400m walk of any stop; it's shown for context and isn't scored separately.
       </p>
 
       <ol className="suburb-ranking">

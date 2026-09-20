@@ -3,10 +3,12 @@ One-shot ETL: build data-pipeline/output/hamilton.db from the raw CSVs in
 data-pipeline/raw/.
 
 Sources:
-  - sa2_higher_geographies.csv : filters the 62 SA2s belonging to Hamilton City
+  - sa2_higher_geographies.csv : filters the 62 SA2s belonging to Hamilton City, and their polygons
   - sa2_centroids.csv          : NZTM/WGS84 coordinates per SA2
   - mbie_rental_bond.csv       : rent statistics per SA2 / dwelling type / bed count / quarter
-  - bus_stops_hamilton.csv     : bus stop locations (NZTM), deduplicated by STOP_ID
+  - bus_stops_hamilton.csv     : bus stop locations (NZTM); one row per stop-route pair
+  - hamilton_lake_osm.geojson  : OpenStreetMap outline of Hamilton Lake (WGS84), used to exclude
+                                 lake water when sampling that suburb's polygon
 
 Run once with: python build_hamilton_db.py
 """
@@ -14,13 +16,29 @@ Run once with: python build_hamilton_db.py
 import sqlite3
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import shapely
+from pyproj import Transformer
+from shapely import wkt
+from shapely.geometry import shape
 
 RAW_DIR = Path(__file__).resolve().parent.parent / "raw"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 DB_PATH = OUTPUT_DIR / "hamilton.db"
 
-BUS_STOP_RADIUS_M = 500
+# Transport access: sample each suburb's polygon on a regular grid, and at every point count the
+# distinct bus routes with a stop within WALK_RADIUS_M. A suburb's walk coverage is the share of
+# points with at least one route; its route reach is the mean number of routes per point, capped at
+# ROUTE_CAP per point (going from 1 to 2 routes matters far more than from 8 to 9, and uncapped the
+# CBD's ~10 would squash every other suburb into the bottom of the scale). Points with no route in
+# range count as 0 routes, so coverage is already reflected in the average.
+WALK_RADIUS_M = 400
+GRID_STEP_M = 50
+ROUTE_CAP = 4
+# Build-time sanity check: sampled area (points x cell area) must land within this fraction of the
+# suburb's Stats NZ land area, which catches a wrong projection, a bad polygon or a mis-applied mask.
+LAND_AREA_TOLERANCE = 0.05
 STALE_THRESHOLD_QUARTERS = 4
 
 # Fixed list of destinations users can pick, per the project proposal's functional requirements.
@@ -33,13 +51,22 @@ DESTINATIONS = [
 ]
 
 
-def load_hamilton_sa2_codes(higher_geo_path: Path) -> pd.DataFrame:
-    """Return the 62 SA2 codes/names belonging to Hamilton City (by TA, not by name)."""
+def load_hamilton_sa2(higher_geo_path: Path) -> tuple[pd.DataFrame, dict]:
+    """
+    Return the 62 SA2s belonging to Hamilton City (by TA, not by name), and a
+    {sa2_code: (polygon, land_area_sq_km)} dict for them. Both come from one read of the
+    large national file.
+    """
     df = pd.read_csv(higher_geo_path)
     hamilton = df[df["TA2019_V1_00_NAME"] == "Hamilton City"]
-    return hamilton[["SA22019_V1_00", "SA22019_V1_00_NAME"]].rename(
+    polygons = {
+        int(row["SA22019_V1_00"]): (wkt.loads(row["WKT"]), float(row["LAND_AREA_SQ_KM"]))
+        for _, row in hamilton.iterrows()
+    }
+    sa2 = hamilton[["SA22019_V1_00", "SA22019_V1_00_NAME"]].rename(
         columns={"SA22019_V1_00": "sa2_code", "SA22019_V1_00_NAME": "sa2_name"}
     )
+    return sa2, polygons
 
 
 def load_sa2_centroids(centroids_path: Path, hamilton_sa2: pd.DataFrame) -> pd.DataFrame:
@@ -177,18 +204,71 @@ def load_bus_stops(bus_stops_path: Path) -> pd.DataFrame:
     )
 
 
-def compute_bus_stops_within_radius(
-    suburbs: pd.DataFrame, bus_stops: pd.DataFrame, radius_m: float = BUS_STOP_RADIUS_M
-) -> pd.DataFrame:
-    """Count bus stops within radius_m of each suburb's NZTM centroid."""
-    counts = []
-    for _, suburb in suburbs.iterrows():
-        dx = bus_stops["easting"] - suburb["easting"]
-        dy = bus_stops["northing"] - suburb["northing"]
-        distance = (dx**2 + dy**2) ** 0.5
-        counts.append((suburb["sa2_code"], int((distance <= radius_m).sum())))
+def load_bus_stop_routes(bus_stops_path: Path) -> pd.DataFrame:
+    """One row per (route, stop location): which routes serve where. Unlike load_bus_stops this
+    keeps the route, since route reach is what transport scoring is measuring."""
+    df = pd.read_csv(bus_stops_path)
+    return df[["ROUTE_ID", "x", "y"]].drop_duplicates().rename(
+        columns={"ROUTE_ID": "route_id", "x": "easting", "y": "northing"}
+    )
 
-    return pd.DataFrame(counts, columns=["sa2_code", "bus_stop_count_500m"])
+
+def load_water_mask(geojson_path: Path):
+    """Hamilton Lake's OSM outline (WGS84 lon/lat) projected to NZTM2000, as one shapely polygon."""
+    import json
+
+    with open(geojson_path) as f:
+        features = json.load(f)["features"]
+    to_nztm = Transformer.from_crs("EPSG:4326", "EPSG:2193", always_xy=True)
+    polygons = []
+    for feature in features:
+        geom = shape(feature["geometry"])
+        polygons.append(shapely.transform(geom, lambda xy: np.column_stack(to_nztm.transform(xy[:, 0], xy[:, 1]))))
+    return shapely.union_all(polygons)
+
+
+def sample_points(polygon, water, step: float = GRID_STEP_M) -> np.ndarray:
+    """Cell-centre points of a grid over the polygon, excluding water. The grid is anchored to
+    multiples of `step` in NZTM (not to each polygon's own bounds), so results don't depend on how
+    a suburb's bounding box happens to fall."""
+    minx, miny, maxx, maxy = polygon.bounds
+    xs = (np.arange(np.floor(minx / step), np.ceil(maxx / step)) + 0.5) * step
+    ys = (np.arange(np.floor(miny / step), np.ceil(maxy / step)) + 0.5) * step
+    grid_x, grid_y = np.meshgrid(xs, ys)
+    x, y = grid_x.ravel(), grid_y.ravel()
+    keep = shapely.contains_xy(polygon, x, y) & ~shapely.contains_xy(water, x, y)
+    return np.column_stack([x[keep], y[keep]])
+
+
+def compute_transport_access(
+    polygons: dict, stop_routes: pd.DataFrame, water, radius_m: float = WALK_RADIUS_M
+) -> pd.DataFrame:
+    """
+    Per suburb: walk_coverage_400m (share of the suburb's land within radius_m of any bus stop) and
+    avg_routes_400m (mean distinct routes within radius_m, capped at ROUTE_CAP per point). Stops are
+    counted city-wide, whichever suburb they sit in.
+    """
+    stops_by_route = [g[["easting", "northing"]].to_numpy() for _, g in stop_routes.groupby("route_id")]
+
+    rows = []
+    for sa2_code, (polygon, land_area_sq_km) in polygons.items():
+        points = sample_points(polygon, water)
+        sampled_sq_km = len(points) * GRID_STEP_M**2 / 1e6
+        assert abs(sampled_sq_km - land_area_sq_km) <= LAND_AREA_TOLERANCE * land_area_sq_km, (
+            f"SA2 {sa2_code}: sampled {sampled_sq_km:.3f} km2 vs land area {land_area_sq_km:.3f} km2"
+        )
+
+        routes_in_reach = np.zeros(len(points), dtype=int)
+        for stops in stops_by_route:
+            dx = points[:, 0][:, None] - stops[:, 0][None, :]
+            dy = points[:, 1][:, None] - stops[:, 1][None, :]
+            routes_in_reach += ((dx**2 + dy**2) <= radius_m**2).any(axis=1)
+
+        rows.append((sa2_code, float((routes_in_reach >= 1).mean()), float(np.minimum(routes_in_reach, ROUTE_CAP).mean())))
+
+    out = pd.DataFrame(rows, columns=["sa2_code", "walk_coverage_400m", "avg_routes_400m"])
+    assert out["walk_coverage_400m"].between(0, 1).all() and out["avg_routes_400m"].between(0, ROUTE_CAP).all()
+    return out.round({"walk_coverage_400m": 4, "avg_routes_400m": 4})
 
 
 def load_destinations() -> pd.DataFrame:
@@ -255,7 +335,8 @@ CREATE TABLE bus_stops (
 
 CREATE TABLE suburb_bus_access (
     sa2_code INTEGER PRIMARY KEY,
-    bus_stop_count_500m INTEGER NOT NULL,
+    walk_coverage_400m REAL NOT NULL,
+    avg_routes_400m REAL NOT NULL,
     FOREIGN KEY (sa2_code) REFERENCES suburbs (sa2_code)
 );
 
@@ -325,13 +406,15 @@ def build_database(
 
 
 def main() -> None:
-    hamilton_sa2 = load_hamilton_sa2_codes(RAW_DIR / "sa2_higher_geographies.csv")
+    hamilton_sa2, polygons = load_hamilton_sa2(RAW_DIR / "sa2_higher_geographies.csv")
     assert len(hamilton_sa2) == 62, f"Expected 62 Hamilton SA2s, got {len(hamilton_sa2)}"
 
     suburbs = load_sa2_centroids(RAW_DIR / "sa2_centroids.csv", hamilton_sa2)
     rent = load_rental_bond(RAW_DIR / "mbie_rental_bond.csv", hamilton_sa2)
     bus_stops = load_bus_stops(RAW_DIR / "bus_stops_hamilton.csv")
-    bus_access = compute_bus_stops_within_radius(suburbs, bus_stops)
+    stop_routes = load_bus_stop_routes(RAW_DIR / "bus_stops_hamilton.csv")
+    water = load_water_mask(RAW_DIR / "hamilton_lake_osm.geojson")
+    bus_access = compute_transport_access(polygons, stop_routes, water)
     data_status = build_suburb_data_status(rent, hamilton_sa2)
     destinations = load_destinations()
     destination_distances = compute_suburb_destination_distances(suburbs, destinations)

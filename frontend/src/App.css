@@ -517,6 +517,12 @@
   font-weight: 400;
 }
 
+.score-breakdown-detail {
+  display: block;
+  font-size: 0.75rem;
+  color: #78716c;
+}
+
 .score-breakdown th {
   color: #57534e;
   /* No nowrap: fine for a short fixed word like "Rent", but the distance
@@ -525,6 +531,29 @@
      table's column width enough to break the two-column page layout (see
      the min-width: 0 fix above). Wrapping here is the better outcome
      anyway: a two-line label in a narrow column, not a wider column. */
+}
+
+/* At phone width the label, value and meter can't share one row without
+   squeezing the value into a ~65px column (the two-line transport figure
+   wrapped to nine lines). Stack the label above its value + meter instead. */
+@media (max-width: 480px) {
+  .score-breakdown,
+  .score-breakdown tbody {
+    display: block;
+  }
+
+  .score-breakdown tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    column-gap: 0.75rem;
+    padding: 0.3rem 0;
+  }
+
+  .score-breakdown th {
+    grid-column: 1 / -1;
+    padding-bottom: 0;
+  }
 }
 
 .score-meter {

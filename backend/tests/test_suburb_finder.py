@@ -127,7 +127,9 @@ check("budget=500 -> Hamilton Central ranks #1 (equal weights)", r[0]["sa2_name"
 hc = next(x for x in r if x["sa2_name"] == "Hamilton Central")
 # distance normalised_score is 0.4659, not the raw-distance figure of 0.468 --
 # distance_m (5982.44) rounds to 6000m for scoring (see the 100m rounding step).
-manual = round((0.8537 + 1 + 0.4659) / 3, 4)
+# transport normalised_score is 0.9459, not 1: Hamilton Central's 3.82 routes
+# rounds to 3.8, below Kirikiriroa's 3.99 (-> 4.0), which now sets the max.
+manual = round((0.8537 + 0.9459 + 0.4659) / 3, 4)
 check("Hamilton Central overall_score matches manual calc", abs(hc["overall_score"] - manual) < 0.001, (hc["overall_score"], manual))
 
 # --- 6. Full population (very high budget) ---
@@ -153,13 +155,20 @@ for dest in ["University of Waikato", "Transport Centre", "The Base", "Waikato H
     nearest_by_dest[dest] = nearest["sa2_name"]
 check("distance nearest-suburb differs meaningfully across destinations", len(set(nearest_by_dest.values())) >= 2, nearest_by_dest)
 
-# --- 8. Zero-bus-stop suburbs included without crashing ---
+# --- 8. Low-coverage suburbs included without crashing ---
+# Rotokauri-Waiwhakareke, Ruakura and Peacockes are large, still-developing
+# suburbs with little of their land within a 400m walk of a stop. (Formerly
+# "zero-bus-stop suburbs" under the centroid-count measure, which scored all
+# three exactly 0; walk-based route reach gives Ruakura and Rotokauri a small
+# but non-zero score since parts of them are served.)
 code, body = call({"budget": 1000, "destination": "The Base"})
 r = body["results"]
-zero_stop_names = {"Rotokauri-Waiwhakareke", "Ruakura", "Peacockes"}
-present = {x["sa2_name"]: x for x in r if x["sa2_name"] in zero_stop_names}
-check("all 3 zero-bus-stop suburbs present at budget=1000", set(present.keys()) == zero_stop_names, set(present.keys()))
-check("zero-bus-stop suburbs have transport normalised_score == 0", all(v["score_breakdown"]["transport"]["normalised_score"] == 0 for v in present.values()), {k: v["score_breakdown"]["transport"] for k, v in present.items()})
+low_coverage_names = {"Rotokauri-Waiwhakareke", "Ruakura", "Peacockes"}
+present = {x["sa2_name"]: x for x in r if x["sa2_name"] in low_coverage_names}
+check("all 3 low-coverage suburbs present at budget=1000", set(present.keys()) == low_coverage_names, set(present.keys()))
+check("low-coverage suburbs have walk_coverage < 0.5", all(v["score_breakdown"]["transport"]["walk_coverage"] < 0.5 for v in present.values()), {k: v["score_breakdown"]["transport"] for k, v in present.items()})
+check("low-coverage suburbs have a low transport normalised_score (< 0.2)", all(v["score_breakdown"]["transport"]["normalised_score"] < 0.2 for v in present.values()), {k: v["score_breakdown"]["transport"]["normalised_score"] for k, v in present.items()})
+check("Peacockes has the lowest transport score of all (normalised_score == 0)", present["Peacockes"]["score_breakdown"]["transport"]["normalised_score"] == min(x["score_breakdown"]["transport"]["normalised_score"] for x in r) == 0, present["Peacockes"]["score_breakdown"]["transport"])
 
 # --- 9. Determinism across repeated identical calls ---
 code, b1 = call({"budget": 550, "destination": "The Base"})
@@ -264,6 +273,40 @@ if all(trio.values()):
 ruakura = by_name.get("Ruakura")
 if ruakura and all(trio.values()):
     check("distance rounding: Ruakura (1253m->1300m) does not tie with the ~1100m trio", ruakura["score_breakdown"]["distance"]["normalised_score"] not in scores.values(), (ruakura["score_breakdown"]["distance"], scores))
+
+# --- 15. Transport: walk-based route reach ---
+# transport.value is the mean number of distinct bus routes within a 400m walk
+# of a point in the suburb (capped at 4 per point), walk_coverage the share of
+# the suburb within 400m of any stop.
+code, body = call({"budget": 10000, "destination": "The Base"})
+r = body["results"]
+tr = {x["sa2_name"]: x["score_breakdown"]["transport"] for x in r}
+check("transport breakdown has exactly value/walk_coverage/normalised_score", all(set(t.keys()) == {"value", "walk_coverage", "normalised_score"} for t in tr.values()), next(iter(tr.values())))
+check("transport value is within [0, 4] (the per-point route cap)", all(0 <= t["value"] <= 4 for t in tr.values()), {k: t["value"] for k, t in tr.items() if not 0 <= t["value"] <= 4})
+check("transport walk_coverage is within [0, 1]", all(0 <= t["walk_coverage"] <= 1 for t in tr.values()), {k: t["walk_coverage"] for k, t in tr.items() if not 0 <= t["walk_coverage"] <= 1})
+check("transport value >= walk_coverage everywhere (each covered point has >= 1 route)", all(t["value"] >= t["walk_coverage"] - 1e-4 for t in tr.values()), {k: t for k, t in tr.items() if t["value"] < t["walk_coverage"] - 1e-4})
+check("Kirikiriroa (most routes reachable) has transport normalised_score == 1", tr["Kirikiriroa"]["normalised_score"] == 1, tr["Kirikiriroa"])
+
+# Hamilton Lake: its Stats NZ polygon includes the lake (~23%), which no bus
+# can serve, so the lake is masked out of the sampling (OSM outline). Counted
+# as land it would score coverage ~0.83 and ~1.72 routes -- both below these
+# bounds -- understating a suburb with plenty of stops on its shores.
+hl = tr["Hamilton Lake"]
+check("Hamilton Lake: lake masked out (walk_coverage ~0.91, not the ~0.83 lake-inflated-denominator figure)", 0.88 <= hl["walk_coverage"] <= 0.94, hl)
+check("Hamilton Lake: lake masked out (value >= 1.8, not the ~1.72 unmasked figure)", hl["value"] >= 1.8, hl)
+
+# Transport rounding to 0.1 route: at budget=600 with no destination, Glenview
+# (1.395), Forest Lake (1.4125) and Melville South (1.4135) differ raw but all
+# round to 1.4 and should tie; Kahikatea (1.68 -> 1.7) is a different bucket.
+code, body = call({"budget": 600})
+by_name = {x["sa2_name"]: x["score_breakdown"]["transport"] for x in body["results"]}
+trio_t = [by_name.get(n) for n in ("Glenview", "Forest Lake (Hamilton City)", "Melville South")]
+check("transport rounding: Glenview, Forest Lake and Melville South present", all(t is not None for t in trio_t), list(by_name.keys())[:5])
+if all(trio_t):
+    check("transport rounding: raw values differ", len({t["value"] for t in trio_t}) == 3, [t["value"] for t in trio_t])
+    check("transport rounding: all three round to 1.4 and tie on transportScore", len({t["normalised_score"] for t in trio_t}) == 1, trio_t)
+    kah = by_name.get("Kahikatea")
+    check("transport rounding: Kahikatea (1.68->1.7) does not tie with the 1.4 trio", kah is not None and kah["normalised_score"] != trio_t[0]["normalised_score"], (kah, trio_t[0]))
 
 # --- summary ---
 passed = sum(1 for s, _, _ in results_log if s == "PASS")

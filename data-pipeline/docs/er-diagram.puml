@@ -34,7 +34,8 @@ entity "RENT" as rent {
 entity "SUBURB_BUS_ACCESS" as suburb_bus_access {
   * sa2_code : INTEGER <<PK, FK>>
   --
-  bus_stop_count_500m : INTEGER
+  walk_coverage_400m : REAL
+  avg_routes_400m : REAL
 }
 
 entity "SUBURB_DATA_STATUS" as suburb_data_status {
@@ -78,11 +79,12 @@ destinations ||--o{ suburb_destination_distance : "is target of\ndistance for"
 note right of bus_stops
   No FK to SUBURBS.
   Geographically, "which suburbs is a stop within
-  500m of" is many-to-many (a stop can be near more
-  than one suburb centroid; a suburb has many stops
+  walking distance of" is many-to-many (a stop can be
+  near more than one suburb; a suburb has many stops
   nearby). That raw M:N is never materialised as a
-  bridge table -- the ETL step resolves it into the
-  1:1 fact SUBURB_BUS_ACCESS.bus_stop_count_500m.
+  bridge table -- the ETL step samples each suburb's
+  polygon and resolves it into the 1:1 fact
+  SUBURB_BUS_ACCESS (walk_coverage_400m, avg_routes_400m).
 end note
 
 note bottom of suburb_destination_distance

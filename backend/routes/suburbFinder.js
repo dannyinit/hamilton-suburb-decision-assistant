@@ -16,18 +16,20 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // transport are flat constants; distance is 10% of each destination's own
 // full-population range, since the four destinations sit at genuinely
 // different distances from the city (confirmed against real geography
-// before being hardcoded here).
+// before being hardcoded here). Transport's 0.4 is likewise ~10% of its
+// full-population range (0.067–3.985 routes, so 0.392).
 //
 // This guards a different scenario from ROUNDING_STEP below: it stops a
 // genuinely tight population (e.g. a heavily budget-narrowed `included`
 // set) from being stretched to fill [0,1] as if its small spread were the
 // full story. Confirmed against real data across every $5-step budget:
 // with a normally-sized `included` set this floor never actually engages
-// for rent or transport, and for distance only at the 2-suburbs-left
-// extreme for 2 of 4 destinations — it's a rare-edge-case safety net, not
-// the mechanism doing routine work.
+// for rent, and for distance only at the 2-suburbs-left extreme for 2 of 4
+// destinations — it's a rare-edge-case safety net, not the mechanism doing
+// routine work. (That was measured before transport changed to walk-based
+// route reach; see TRANSPORT_THRESHOLD's own check below.)
 const RENT_THRESHOLD = 50;
-const TRANSPORT_THRESHOLD = 3;
+const TRANSPORT_THRESHOLD = 0.4;
 const DISTANCE_THRESHOLDS = {
   'University of Waikato': 1000,
   'Transport Centre': 750,
@@ -46,11 +48,14 @@ const DISTANCE_THRESHOLDS = {
 // precision anywhere near that fine. 100m has no equivalent data-derived
 // answer (there's no natural "reporting bucket" the way rent has one) —
 // it's a judgment call, chosen as a city-block-scale unit well below the
-// ~750-1000m distance thresholds above. Transport (bus_stop_count) is
-// deliberately not rounded: it's already a small integer count, and a
-// difference of 1 stop is a real difference, not measurement noise.
+// ~750-1000m distance thresholds above. Transport (avg_routes_400m) is
+// rounded to 0.1 route: it's a mean over a 50m sampling grid, so it carries
+// sampling noise (halving the grid step moved it by at most 0.044, under
+// half of this step), and 0.1 is a judgment call in the same way distance's
+// 100m is — it leaves 30 distinct values across the 60 CURRENT suburbs.
 const RENT_ROUNDING_STEP = 5;
 const DISTANCE_ROUNDING_STEP = 100;
+const TRANSPORT_ROUNDING_STEP = 0.1;
 
 function roundTo(value, step) {
   return Math.round(value / step) * step;
@@ -90,7 +95,7 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
 // One row per suburb for the chosen destination: data status (for the
 // insufficient_data hard constraint), the ALL/ALL median rent (for the
 // rent scoring criterion only — NOT the budget check, see `cheapest`
-// below), bus stop count (transport criterion), and distance to the
+// below), average routes reachable on foot (transport criterion), and distance to the
 // chosen destination (distance criterion). suburb_bus_access and
 // suburb_destination_distance have complete coverage (62 rows / 62x4 rows
 // respectively) so plain JOINs are safe; rent is LEFT JOINed since
@@ -120,7 +125,8 @@ const findCandidatesStmt = db.prepare(`
     s.sa2_name,
     sds.data_status,
     r.median_rent,
-    sba.bus_stop_count_500m AS bus_stop_count,
+    sba.avg_routes_400m,
+    sba.walk_coverage_400m,
     sdd.distance_m,
     c.dwelling_type AS lowest_dwelling_type,
     c.number_of_beds AS lowest_number_of_beds,
@@ -145,7 +151,8 @@ const findCandidatesNoDestinationStmt = db.prepare(`
     s.sa2_name,
     sds.data_status,
     r.median_rent,
-    sba.bus_stop_count_500m AS bus_stop_count,
+    sba.avg_routes_400m,
+    sba.walk_coverage_400m,
     c.dwelling_type AS lowest_dwelling_type,
     c.number_of_beds AS lowest_number_of_beds,
     c.median_rent AS lowest_rent,
@@ -305,7 +312,8 @@ function computeSuburbFinder(query) {
       sa2_code: row.sa2_code,
       sa2_name: row.sa2_name,
       median_rent: row.median_rent,
-      bus_stop_count: row.bus_stop_count,
+      avg_routes_400m: row.avg_routes_400m,
+      walk_coverage_400m: row.walk_coverage_400m,
       lowest_rent: lowestRent,
       ...(hasDestination && { distance_m: row.distance_m }),
     });
@@ -354,9 +362,13 @@ function computeSuburbFinder(query) {
     reverse: true, // cost: lower rent is better
   });
   const transportScores = normaliseCriterion(included, {
-    getValue: (s) => s.bus_stop_count,
+    // Rounded for scoring only — score_breakdown below shows the raw
+    // avg_routes_400m. Higher is better; walk coverage isn't scored
+    // separately, since points with no route in range already count as 0
+    // routes in this average.
+    getValue: (s) => roundTo(s.avg_routes_400m, TRANSPORT_ROUNDING_STEP),
     threshold: TRANSPORT_THRESHOLD,
-    reverse: false, // benefit: more bus stops is better
+    reverse: false, // benefit: more routes reachable is better
   });
   const distanceScores = hasDestination
     ? normaliseCriterion(included, {
@@ -390,7 +402,11 @@ function computeSuburbFinder(query) {
       overall_score: overallScore,
       score_breakdown: {
         rent: { value: suburb.median_rent, normalised_score: rentScore },
-        transport: { value: suburb.bus_stop_count, normalised_score: transportScore },
+        transport: {
+          value: suburb.avg_routes_400m,
+          walk_coverage: suburb.walk_coverage_400m,
+          normalised_score: transportScore,
+        },
         ...(hasDestination && {
           distance: { value: suburb.distance_m, normalised_score: distanceScore },
         }),

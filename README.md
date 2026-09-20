@@ -16,7 +16,7 @@ Raw data files are included directly in `raw/` for reproducibility (they were no
 ### 2. Waikato GTFS bus stop data (BUSIT)
 - File: `bus_stops_hamilton.csv` (from the `BUS_STOP_HAMILTON` layer, NOT `BUS_ROUTE_HAMILTON`)
 - Source: https://data.waikatoregion.govt.nz:8443/ords/piplx/f?p=140:12:0::NO::P12_METADATA_ID:402
-- Notes: x, y coordinates in NZTM2000 (EPSG:2193), metres. 1557 rows, 1045 unique STOP_ID values; dedupe by STOP_ID before counting stops.
+- Notes: x, y coordinates in NZTM2000 (EPSG:2193), metres. 1557 rows (one per stop-route pair), 1045 unique STOP_ID values, 21 routes. The `bus_stops` table is deduplicated by STOP_ID, but transport access is computed from the stop-route pairs, since it counts distinct routes.
 
 ### 3. Stats NZ SA2 2019 centroids
 - File: `sa2_centroids.csv`
@@ -79,7 +79,7 @@ declared in the schema will silently not be checked.
 ### `bus_stops` (1045 rows, dimension)
 | column | type | notes |
 |---|---|---|
-| stop_id | INTEGER PK | deduplicated from 1557 raw rows (a stop appears once per route) |
+| stop_id | INTEGER PK | deduplicated from 1557 raw rows (a stop appears once per route). Not used by the transport calculation, which reads the stop-route pairs from the raw file |
 | stop_name | TEXT | |
 | easting, northing | REAL | NZTM2000 |
 
@@ -87,7 +87,14 @@ declared in the schema will silently not be checked.
 | column | type | notes |
 |---|---|---|
 | sa2_code | INTEGER PK FK→suburbs | |
-| bus_stop_count_500m | INTEGER | stops within 500m of the suburb's NZTM centroid |
+| walk_coverage_400m | REAL | share (0–1) of the suburb's land within 400m of any bus stop (straight-line; stops counted city-wide) |
+| avg_routes_400m | REAL | mean number of distinct bus routes with a stop within 400m, over a 50m grid of points across the suburb's land, each point capped at 4 routes. Points with no stop in range count 0, so this already reflects coverage. This is the transport scoring input |
+
+Both columns come from sampling each suburb's Stats NZ polygon (not its centroid, which can
+land somewhere unrepresentative — Hamilton Lake's sits on the lake). Lake water is excluded
+from the sampling using the OSM outline (dataset 5). See `compute_transport_access` in
+`scripts/build_hamilton_db.py`; the build asserts every suburb's sampled area is within 5% of
+its Stats NZ land area.
 
 ### `suburb_data_status` (62 rows, fact)
 One row per suburb, summarising the overall (`dwelling_type='ALL'`, `number_of_beds='ALL'`)
@@ -156,9 +163,9 @@ rules that motivated the design are still accurate and kept here for context:
 See [`data-pipeline/docs/er-diagram.puml`](data-pipeline/docs/er-diagram.puml) (PlantUML; open with
 the PlantUML VS Code extension, Alt+D to preview). It covers all 7 tables above and both
 many-to-many relationships in this schema, resolved two different ways:
-- `bus_stops` ↔ `suburbs` (a stop can lie within 500m of more than one suburb centroid, and a
+- `bus_stops` ↔ `suburbs` (a stop can be within walking distance of more than one suburb, and a
   suburb has many stops nearby): never materialised as a bridge table — collapsed at ETL time
-  into the precomputed 1:1 fact `suburb_bus_access.bus_stop_count_500m`.
+  into the precomputed 1:1 fact `suburb_bus_access` (`walk_coverage_400m`, `avg_routes_400m`).
 - `suburbs` ↔ `destinations` (every suburb has a distance to every destination, and vice versa):
   resolved with a genuine junction table, `suburb_destination_distance`, since the per-pair
   distance value itself is needed downstream and can't be aggregated away.
@@ -167,5 +174,5 @@ many-to-many relationships in this schema, resolved two different ways:
 
 1. Create a virtual environment: `python3 -m venv venv`
 2. Activate it: `source venv/bin/activate`
-3. Install dependencies: `pip install pandas`
+3. Install dependencies: `pip install -r requirements.txt` (pandas, numpy, shapely, pyproj)
 4. Run the ingestion script to build `output/hamilton.db`
