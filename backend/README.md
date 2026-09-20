@@ -380,7 +380,7 @@ walk (straight-line; stops are counted city-wide, whichever suburb they sit in).
 | field | notes |
 |---|---|
 | `value` | **the scored figure**: mean number of distinct routes reachable within 400m across the suburb's points, with each point capped at 4 routes (going from 1 to 2 routes matters far more than from 8 to 9, and uncapped the CBD's ~10 would squash every other suburb into the bottom of the scale). Points with no stop in range count as 0, so unserved land lowers it — coverage is already inside this number |
-| `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Context for the user; **not scored separately**, since it's already reflected in `value` |
+| `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Returned for API consumers, not shown in the UI or scored separately — it's already reflected in `value`, and the UI deliberately shows only one transport signal |
 | `normalised_score` | as for the other criteria |
 
 This replaced a count of stops within 500m of the suburb's centroid, which depended

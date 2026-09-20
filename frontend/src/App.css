@@ -517,12 +517,6 @@
   font-weight: 400;
 }
 
-.score-breakdown-detail {
-  display: block;
-  font-size: 0.75rem;
-  color: #78716c;
-}
-
 .score-breakdown th {
   color: #57534e;
   /* No nowrap: fine for a short fixed word like "Rent", but the distance
@@ -534,7 +528,7 @@
 }
 
 /* At phone width the label, value and meter can't share one row without
-   squeezing the value into a ~65px column (the two-line transport figure
+   squeezing the value into a ~65px column (the transport sentence
    wrapped to nine lines). Stack the label above its value + meter instead. */
 @media (max-width: 480px) {
   .score-breakdown,

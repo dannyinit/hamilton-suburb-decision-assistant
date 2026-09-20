@@ -24,19 +24,21 @@ function formatDistance(metres) {
 }
 
 // transport.value is the average number of distinct bus routes within a 400m
-// walk (capped at 4 per point), the figure actually scored; walk_coverage is
-// the share of the suburb within 400m of any stop — context only, not
-// scored separately (see backend/README.md's "Transport" section). Two
-// lines rather than one long sentence: the cell is narrow next to the
-// score meter, and the scored number reads first.
-function formatTransport({ value, walk_coverage }) {
+// walk of a point in the suburb (capped at 4 per point) — the figure actually
+// scored. 400m at a normal pace is about 5 minutes, which reads more
+// naturally than a bare distance. walk_coverage (also in the response) is
+// deliberately not shown: it's already folded into value (points with no
+// stop in range count 0), and showing it would offer users a second, unscored
+// signal for "is this suburb good on transport". The title repeats the
+// legend's explanation for hover; touch users get it from the legend.
+const TRANSPORT_EXPLANATION = "Average across the suburb's area of how many different bus routes have a stop within a 5-minute walk (400m), counting at most 4 per point.";
+
+function formatTransport({ value }) {
+  const rounded = value.toFixed(1);
   return (
-    <>
-      {value.toFixed(1)} routes reachable on average
-      <span className="score-breakdown-detail">
-        {Math.round(walk_coverage * 100)}% within a 400m walk of a stop
-      </span>
-    </>
+    <span title={TRANSPORT_EXPLANATION}>
+      About {rounded === '1.0' ? '1 bus route' : `${rounded} bus routes`} within a 5-minute walk (400m)
+    </span>
   );
 }
 
@@ -191,7 +193,7 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
         Each suburb below shows two rent figures: Median Rent (used to rank suburbs) and Cheapest option found (a specific dwelling type that fits your budget, used only to decide whether to include the suburb — not a second rank-worthy estimate).
       </p>
       <p className="suburb-ranking-legend">
-        Transport is the average number of bus routes you could walk to (within 400m) from a point in the suburb, counting up to 4 per point — so it rewards having more than one route, and suburbs with land far from any stop score lower. The percentage beside it is how much of the suburb is within a 400m walk of any stop; it's shown for context and isn't scored separately.
+        Transport: from a typical point in the suburb, roughly how many different bus routes have a stop within a 5-minute walk (400m in a straight line). It's an average across the suburb's area, counting at most 4 routes per point, so a suburb with areas far from any stop scores lower.
       </p>
 
       <ol className="suburb-ranking">

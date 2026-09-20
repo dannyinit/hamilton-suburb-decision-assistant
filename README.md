@@ -87,7 +87,7 @@ declared in the schema will silently not be checked.
 | column | type | notes |
 |---|---|---|
 | sa2_code | INTEGER PK FK→suburbs | |
-| walk_coverage_400m | REAL | share (0–1) of the suburb's land within 400m of any bus stop (straight-line; stops counted city-wide) |
+| walk_coverage_400m | REAL | share (0–1) of the suburb's land within 400m of any bus stop (straight-line; stops counted city-wide). Returned by the API for consumers; not shown in the UI or scored (it's already reflected in `avg_routes_400m`) |
 | avg_routes_400m | REAL | mean number of distinct bus routes with a stop within 400m, over a 50m grid of points across the suburb's land, each point capped at 4 routes. Points with no stop in range count 0, so this already reflects coverage. This is the transport scoring input |
 
 Both columns come from sampling each suburb's Stats NZ polygon (not its centroid, which can
