@@ -69,3 +69,12 @@ export function getDwellingTypePluralLabel(value) {
 export function getNumberOfBedsLabel(value) {
   return NUMBER_OF_BEDS_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
+
+// For "Houses with 2 bedrooms"-style phrasing: the label carries its own
+// singular/plural ("1 bedroom"/"2 bedrooms"), so it's used as-is. Only the
+// first letter is lowercased, for labels that start with a word rather than
+// a digit ("Exactly 5 bedrooms" -> "with exactly 5 bedrooms").
+export function getWithBedsPhrase(value) {
+  const label = getNumberOfBedsLabel(value);
+  return `with ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+}

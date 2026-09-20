@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { getDwellingTypeLabel, getDwellingTypePluralLabel, getNumberOfBedsLabel } from '../rentalCheckOptions';
+import { getDwellingTypeLabel, getDwellingTypePluralLabel, getNumberOfBedsLabel, getWithBedsPhrase } from '../rentalCheckOptions';
 
 const COMPARISON_CLASS = {
   'Below market': 'comparison-below',
@@ -15,16 +15,13 @@ const COMPARISON_CLASS = {
 // labels the dropdown shows (see rentalCheckOptions.js) rather than a
 // separate copy of the value->text mapping.
 function dwellingTypeFallbackNote(data) {
-  // Dropdown labels are plural standalone text ("3 bedrooms"); mid-sentence
-  // as a compound adjective ("3 bedroom Houses") they need to be singular.
-  // Every current label happens to end in "bedroom(s)" and nothing else,
-  // so this simple substring swap covers them all — revisit if a future
-  // label doesn't follow that pattern.
-  const bedsLabel = getNumberOfBedsLabel(data.requested_number_of_beds).replace('bedrooms', 'bedroom');
-  const dwellingTypeLabel = getDwellingTypeLabel(data.requested_dwelling_type);
-  const dwellingTypePlural = getDwellingTypePluralLabel(data.requested_dwelling_type);
+  // 'ALL' ("Any dwelling type") isn't a countable noun, so it reads as
+  // "dwellings" mid-sentence instead of the dropdown label.
+  const anyType = data.requested_dwelling_type === 'ALL';
+  const dwellingTypePlural = anyType ? 'dwellings' : getDwellingTypePluralLabel(data.requested_dwelling_type);
+  const medianSubject = anyType ? 'the median rent' : `the ${getDwellingTypeLabel(data.requested_dwelling_type)} median rent`;
 
-  return `No data for ${bedsLabel} ${dwellingTypePlural} in ${data.sa2_name} — showing the ${dwellingTypeLabel} median rent across all bed counts instead.`;
+  return `No data for ${dwellingTypePlural} ${getWithBedsPhrase(data.requested_number_of_beds)} in ${data.sa2_name} — showing ${medianSubject} across all bed counts instead.`;
 }
 
 // fallback_level 'full' means: neither the exact bed count nor the exact
@@ -35,6 +32,23 @@ function dwellingTypeFallbackNote(data) {
 function fullFallbackNote(data) {
   const dwellingTypePlural = getDwellingTypePluralLabel(data.requested_dwelling_type);
   return `No data for ${dwellingTypePlural} in ${data.sa2_name} — showing the median rent across all dwelling types and bed counts instead.`;
+}
+
+// Names what the figures below describe — the actual dwelling type/bed
+// count and quarter of the row shown, which after a fallback differ from
+// what was requested (the banner under this line says so). "Weekly" here
+// gives the quartile figures their unit.
+function primaryDescription(data) {
+  const anyType = data.dwelling_type === 'ALL';
+  const anyBeds = data.number_of_beds === 'ALL';
+  const dwellingType = anyType ? 'dwellings' : getDwellingTypePluralLabel(data.dwelling_type);
+
+  let subject;
+  if (anyType && anyBeds) subject = 'all dwelling types and bed counts';
+  else if (anyBeds) subject = `${dwellingType} with any number of bedrooms`;
+  else subject = `${dwellingType} ${getWithBedsPhrase(data.number_of_beds)}`;
+
+  return `Weekly rent for ${subject} · data from ${data.timeframe_label} (${data.timeframe_months})`;
 }
 
 // Compact per-row indicator for low_sample_warning, replacing a repeated
@@ -52,7 +66,7 @@ function LowSampleMarker({ warning }) {
 function AsOfCell({ row }) {
   return (
     <td className={row.staleness_warning ? 'as-of is-stale' : 'as-of'}>
-      {row.timeframe}
+      {row.timeframe_label}
       {row.staleness_warning && (
         <span
           className="stale-marker"
@@ -109,7 +123,7 @@ function BedsSubtable({ beds }) {
 // not the native <details> this app uses everywhere else — the revealed
 // content needs to span the full table width via colSpan, which a
 // <details> confined to one cell can't do.
-function DwellingTypeBreakdownTable({ breakdown, footnote, staleFootnote }) {
+function DwellingTypeBreakdownTable({ breakdown, suburbName, footnote, staleFootnote }) {
   const [expandedTypes, setExpandedTypes] = useState(() => new Set());
 
   function toggle(dwellingType) {
@@ -122,6 +136,21 @@ function DwellingTypeBreakdownTable({ breakdown, footnote, staleFootnote }) {
       }
       return next;
     });
+  }
+
+  // A header over zero rows reads as a failed load, so say why it's empty
+  // instead. Worded as "not enough data" rather than a publishing rule:
+  // the likely cause is MBIE suppressing small samples, which is inferred,
+  // not documented for these suburbs.
+  if (breakdown.length === 0) {
+    return (
+      <section className="dwelling-type-empty">
+        <h3>Rent by dwelling type</h3>
+        <p className="no-beds-detail">
+          No breakdown by dwelling type is available for {suburbName} — only the overall figure above has enough data.
+        </p>
+      </section>
+    );
   }
 
   return (
@@ -223,20 +252,14 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
     <div className="status-card ok result-card">
       <h2>{data.sa2_name}</h2>
 
+      <p className="result-description">{primaryDescription(data)}</p>
+
       {data.fallback_level === 'dwelling_type' && (
         <div className="banner banner-info">{dwellingTypeFallbackNote(data)}</div>
       )}
 
       {data.fallback_level === 'full' && (
         <div className="banner banner-info">{fullFallbackNote(data)}</div>
-      )}
-
-      {data.staleness_warning && (
-        <div className="banner banner-warning">{data.staleness_warning}</div>
-      )}
-
-      {data.low_sample_warning && (
-        <div className="banner banner-warning">{data.low_sample_note}</div>
       )}
 
       <dl className="rent-stats">
@@ -254,14 +277,13 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </div>
       </dl>
 
-      <div className="result-meta">
-        <p>
-          {data.dwelling_type === 'ALL' ? 'All dwelling types' : data.dwelling_type}
-          {', '}
-          {data.number_of_beds === 'ALL' ? 'all bed counts' : `${data.number_of_beds} bed(s)`}
-        </p>
-        <p className="result-meta-date">as of {data.timeframe}</p>
-      </div>
+      {data.staleness_warning && (
+        <div className="banner banner-warning">{data.staleness_warning}</div>
+      )}
+
+      {data.low_sample_warning && (
+        <div className="banner banner-warning">{data.low_sample_note}</div>
+      )}
 
       {data.comparison && (
         <p className={`comparison-badge ${COMPARISON_CLASS[data.comparison] ?? ''}`}>
@@ -269,7 +291,7 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </p>
       )}
 
-      <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} footnote={data.low_sample_footnote} staleFootnote={data.stale_footnote} />
+      <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} suburbName={data.sa2_name} footnote={data.low_sample_footnote} staleFootnote={data.stale_footnote} />
     </div>
   );
 }

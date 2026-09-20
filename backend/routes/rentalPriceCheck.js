@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { lowSampleWarning, LOW_SAMPLE_FOOTNOTE } = require('../lowSampleWarning');
+const { quarterLabel, quarterMonths, addQuarters } = require('../quarterLabel');
 
 const router = express.Router();
 
@@ -48,12 +49,24 @@ function comparisonLabel(rent, lowerQuartile, upperQuartile) {
 function stalenessWarning(row) {
   if (row.quarters_stale < STALE_THRESHOLD_QUARTERS) return null;
   const quarterWord = row.quarters_stale === 1 ? 'quarter' : 'quarters';
-  return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
+  // The reference quarter comes from the row itself (its own quarter +
+  // quarters_stale) rather than a separate lookup, so the count and the
+  // quarter named beside it always agree.
+  const latest = quarterLabel(addQuarters(row.timeframe, row.quarters_stale));
+  return `This data is from ${quarterLabel(row.timeframe)}, ${row.quarters_stale} ${quarterWord} older than the most recent data available (${latest}).`;
 }
 
 // Shown once in the breakdown table's footer when any row is stale, rather
-// than repeating the per-row staleness_warning sentence's explanation.
-const STALE_FOOTNOTE = 'Data is from an earlier quarter than the latest MBIE release.';
+// than repeating the per-row staleness_warning sentence's explanation. The
+// reference quarter is looked up per request (not cached or hardcoded) so
+// it tracks the data itself: refresh the database and it moves with it.
+// "Most recent data available", not "latest MBIE release" — the database
+// is a snapshot and may itself lag MBIE's own newest publication.
+const latestTimeframeStmt = db.prepare('SELECT MAX(timeframe) AS timeframe FROM rent');
+
+function staleFootnote() {
+  return `This data is older than the most recent data available (${quarterLabel(latestTimeframeStmt.get().timeframe)}).`;
+}
 
 // Dwelling-type breakdown table shown below the primary result — every
 // specific (dwelling_type != 'ALL', number_of_beds='ALL') row the suburb
@@ -116,6 +129,7 @@ function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
     if (warning) anyStale = true;
     return {
       timeframe: row.timeframe,
+      timeframe_label: quarterLabel(row.timeframe),
       quarters_stale: row.quarters_stale,
       staleness_warning: warning,
     };
@@ -258,12 +272,14 @@ function computeRentalPriceCheck(query) {
         fallback_note: FALLBACK_NOTES[fallbackLevel],
       }),
       timeframe: row.timeframe,
+      timeframe_label: quarterLabel(row.timeframe),
+      timeframe_months: quarterMonths(row.timeframe),
       quarters_stale: row.quarters_stale,
       staleness_warning: stalenessWarning(row),
       ...(rent !== null ? { rent, comparison } : {}),
       dwelling_type_breakdown: dwellingTypeBreakdown,
       ...(anyLowSample && { low_sample_footnote: LOW_SAMPLE_FOOTNOTE }),
-      ...(anyStale && { stale_footnote: STALE_FOOTNOTE }),
+      ...(anyStale && { stale_footnote: staleFootnote() }),
     },
   };
 }

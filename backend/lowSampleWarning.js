@@ -18,7 +18,7 @@ function lowSampleWarning(totalBonds) {
   return {
     isLowSample,
     note: isLowSample
-      ? `This figure is based on a very small sample (${totalBonds} bonds — MBIE's own minimum reportable size) — treat it as a rough indication only.`
+      ? `This figure is based on a very small sample (${totalBonds} bonds — the smallest sample MBIE publishes) — treat it as a rough indication only.`
       : null,
   };
 }
@@ -29,6 +29,6 @@ function lowSampleWarning(totalBonds) {
 // table shows this once, in a footer, rather than once per row. Plain
 // text; the marker symbol itself is a presentation detail left to the
 // frontend, not baked in here.
-const LOW_SAMPLE_FOOTNOTE = `Based on a small sample (${LOW_SAMPLE_THRESHOLD} bonds or fewer — MBIE's own minimum reportable size); treat as a rough indication.`;
+const LOW_SAMPLE_FOOTNOTE = `Based on a small sample (${LOW_SAMPLE_THRESHOLD} bonds — the smallest sample MBIE publishes); treat as a rough indication.`;
 
 module.exports = { LOW_SAMPLE_THRESHOLD, LOW_SAMPLE_FOOTNOTE, lowSampleWarning };

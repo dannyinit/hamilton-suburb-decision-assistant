@@ -252,6 +252,11 @@
   color: #92400e;
 }
 
+.result-description {
+  margin: 0 0 0.75rem;
+  color: #44403c;
+}
+
 .rent-stats {
   display: flex;
   gap: 1.5rem;
@@ -269,21 +274,8 @@
   font-weight: 700;
 }
 
-.result-meta {
-  color: #57534e;
-  font-size: 0.9rem;
-}
-
-.result-meta p {
-  margin: 0;
-}
-
 /* Prevents the date from ever breaking mid-string at narrow widths (CSS
    treats hyphens as break opportunities, and "2026-01-01" has three). */
-.result-meta-date {
-  white-space: nowrap;
-}
-
 .comparison-badge {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
@@ -317,6 +309,20 @@
   border-top: 1px solid #e7e5e4;
   border-collapse: collapse;
   font-size: 0.85rem;
+}
+
+.dwelling-type-empty {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e7e5e4;
+  font-size: 0.85rem;
+}
+
+.dwelling-type-empty h3 {
+  margin: 0 0 0.6rem;
+  font-size: inherit;
+  font-weight: 700;
+  color: #1c1917;
 }
 
 .dwelling-type-table caption {
