@@ -1,11 +1,11 @@
 # Data Pipeline
 
 Scripts and raw data for the Hamilton Suburb Decision Assistant.
-CSV files in `raw/` are not committed to git (see `.gitignore`); they must be re-downloaded from the sources below.
+The data files in `raw/` (CSVs and one GeoJSON) are committed to this repository; the sources below are for citation, licensing and re-downloading a fresh copy if needed.
 
 ## Datasets
 
-Raw CSV files are included directly in `raw/` for reproducibility (they were non-trivial to re-download from the original portals). Sources and notes below are for citation and documentation purposes.
+Raw data files are included directly in `raw/` for reproducibility (they were non-trivial to re-download from the original portals). Sources and notes below are for citation and documentation purposes.
 
 ### 1. MBIE Rental Bond data
 - File: `mbie_rental_bond.csv`
@@ -27,6 +27,12 @@ Raw CSV files are included directly in `raw/` for reproducibility (they were non
 - File: `sa2_higher_geographies.csv`
 - Source: https://datafinder.stats.govt.nz/layer/98779-statistical-area-2-higher-geographies-2019-generalised/
 - Notes: used to correctly filter to the 62 SA2 areas belonging to Hamilton City (`TA2019_V1_00_NAME = "Hamilton City"`). Do NOT filter by suburb name string or the "(Hamilton City)" suffix, since only 7/62 suburbs carry that suffix.
+
+### 5. Hamilton Lake outline (OpenStreetMap)
+- File: `hamilton_lake_osm.geojson` (WGS84 lon/lat, one Polygon, 191 vertices)
+- Source: OpenStreetMap way [28496787](https://www.openstreetmap.org/way/28496787) ("Lake Rotoroa / Hamilton Lake"), retrieved via the Overpass API; OSM data timestamp 2026-09-20T08:20:06Z.
+- Licence: Open Database Licence (ODbL) 1.0 — © OpenStreetMap contributors. Any use of this file, or of anything derived from it, needs this attribution.
+- Notes: used only to exclude lake water when sampling the Hamilton Lake SA2 polygon for walk-coverage/route reach, since Stats NZ's polygon includes the lake (its `AREA_SQ_KM` 2.428 vs `LAND_AREA_SQ_KM` 1.864 km²) and lake points are systematically less served by buses than land. Cross-check: the outline's area is 0.539 km², against Stats NZ's implied water area of 0.564 km² (within 5%). Hamilton Lake is the only Hamilton SA2 where this matters materially — Forest Lake is ~2.5% of its suburb and other OSM water bodies are negligible — so no other water layer is used. It is not an official boundary; LINZ's lake layer was deliberately not pursued for a single suburb.
 
 ## Output schema (`output/hamilton.db`)
 
