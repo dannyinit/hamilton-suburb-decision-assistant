@@ -51,6 +51,10 @@ function stalenessWarning(row) {
   return `This rent data is ${row.quarters_stale} ${quarterWord} old (last updated ${row.timeframe}).`;
 }
 
+// Shown once in the breakdown table's footer when any row is stale, rather
+// than repeating the per-row staleness_warning sentence's explanation.
+const STALE_FOOTNOTE = 'Data is from an earlier quarter than the latest MBIE release.';
+
 // Dwelling-type breakdown table shown below the primary result — every
 // specific (dwelling_type != 'ALL', number_of_beds='ALL') row the suburb
 // genuinely has data for, INCLUDING whichever dwelling_type the primary
@@ -61,7 +65,7 @@ function stalenessWarning(row) {
 // category is skipped throughout, same as the primary lookup above never
 // exposes it.
 const findDwellingTypesStmt = db.prepare(`
-  SELECT dwelling_type, median_rent, total_bonds
+  SELECT dwelling_type, median_rent, total_bonds, timeframe, quarters_stale
   FROM rent
   WHERE sa2_code = ? AND dwelling_type != 'ALL' AND number_of_beds = 'ALL' AND median_rent IS NOT NULL
 `);
@@ -72,7 +76,7 @@ const findDwellingTypesStmt = db.prepare(`
 // either way, but this stays consistent with how suburbFinder.js's
 // lowest_rent avoids per-row queries).
 const findDwellingTypeBedsStmt = db.prepare(`
-  SELECT dwelling_type, number_of_beds, median_rent, total_bonds
+  SELECT dwelling_type, number_of_beds, median_rent, total_bonds, timeframe, quarters_stale
   FROM rent
   WHERE sa2_code = ? AND dwelling_type != 'ALL' AND number_of_beds != 'ALL' AND number_of_beds IS NOT NULL
     AND median_rent IS NOT NULL
@@ -88,10 +92,11 @@ const findDwellingTypeBedsStmt = db.prepare(`
 const DWELLING_TYPE_ORDER = VALID_DWELLING_TYPES.filter((type) => type !== 'ALL');
 const NUMBER_OF_BEDS_ORDER = VALID_NUMBER_OF_BEDS.filter((beds) => beds !== 'ALL');
 
-// Returns { breakdown, anyLowSample } — anyLowSample tells the caller
+// Returns { breakdown, anyLowSample, anyStale } — anyLowSample tells the caller
 // whether to attach the single shared LOW_SAMPLE_FOOTNOTE at all (only
 // when at least one row in the table actually needs it), rather than
 // always including a footnote that might reference nothing on the page.
+// anyStale does the same for STALE_FOOTNOTE.
 function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
   const bedsByType = {};
   for (const row of findDwellingTypeBedsStmt.all(sa2Code)) {
@@ -105,6 +110,17 @@ function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
     return isLowSample;
   };
 
+  let anyStale = false;
+  const stalenessFor = (row) => {
+    const warning = stalenessWarning(row);
+    if (warning) anyStale = true;
+    return {
+      timeframe: row.timeframe,
+      quarters_stale: row.quarters_stale,
+      staleness_warning: warning,
+    };
+  };
+
   const breakdown = findDwellingTypesStmt.all(sa2Code)
     .sort((a, b) => DWELLING_TYPE_ORDER.indexOf(a.dwelling_type) - DWELLING_TYPE_ORDER.indexOf(b.dwelling_type))
     .map((typeRow) => ({
@@ -113,6 +129,7 @@ function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
       median_rent: typeRow.median_rent,
       total_bonds: typeRow.total_bonds,
       low_sample_warning: markIfLowSample(typeRow.total_bonds),
+      ...stalenessFor(typeRow),
       beds: (bedsByType[typeRow.dwelling_type] ?? [])
         .sort((a, b) => NUMBER_OF_BEDS_ORDER.indexOf(a.number_of_beds) - NUMBER_OF_BEDS_ORDER.indexOf(b.number_of_beds))
         .map((bedRow) => ({
@@ -120,10 +137,11 @@ function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
           median_rent: bedRow.median_rent,
           total_bonds: bedRow.total_bonds,
           low_sample_warning: markIfLowSample(bedRow.total_bonds),
+          ...stalenessFor(bedRow),
         })),
     }));
 
-  return { breakdown, anyLowSample };
+  return { breakdown, anyLowSample, anyStale };
 }
 
 // Pure computation, decoupled from Express req/res, so both the real route
@@ -218,7 +236,7 @@ function computeRentalPriceCheck(query) {
   // the compact marker + single shared footnote, since that's where a full
   // sentence per row would actually repeat.
   const { isLowSample: primaryIsLowSample, note: primaryLowSampleNote } = lowSampleWarning(row.total_bonds);
-  const { breakdown: dwellingTypeBreakdown, anyLowSample } = buildDwellingTypeBreakdown(sa2Code, row.dwelling_type);
+  const { breakdown: dwellingTypeBreakdown, anyLowSample, anyStale } = buildDwellingTypeBreakdown(sa2Code, row.dwelling_type);
 
   return {
     status: 200,
@@ -245,6 +263,7 @@ function computeRentalPriceCheck(query) {
       ...(rent !== null ? { rent, comparison } : {}),
       dwelling_type_breakdown: dwellingTypeBreakdown,
       ...(anyLowSample && { low_sample_footnote: LOW_SAMPLE_FOOTNOTE }),
+      ...(anyStale && { stale_footnote: STALE_FOOTNOTE }),
     },
   };
 }

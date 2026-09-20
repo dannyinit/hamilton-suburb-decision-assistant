@@ -373,6 +373,19 @@
   font-weight: 600;
 }
 
+.as-of {
+  white-space: nowrap;
+}
+
+.as-of.is-stale {
+  color: #92400e;
+}
+
+.stale-marker {
+  margin-left: 0.3rem;
+  cursor: help;
+}
+
 .low-sample-marker {
   color: #92400e;
   margin-left: 0.15rem;
@@ -409,8 +422,12 @@
   color: #78716c;
 }
 
-.dwelling-type-table tfoot td {
+.dwelling-type-table tfoot tr:first-child td {
   padding-top: 0.75rem;
+}
+
+.dwelling-type-table tfoot td {
+  padding-top: 0.25rem;
   color: #78716c;
   font-size: 0.8rem;
 }

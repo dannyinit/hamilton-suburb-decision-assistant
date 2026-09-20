@@ -45,6 +45,28 @@ function LowSampleMarker({ warning }) {
   return <sup className="low-sample-marker" aria-hidden="true">†</sup>;
 }
 
+// Per-row "As of" cell: the row's own timeframe, plus a warning icon when
+// it's stale. Unlike LowSampleMarker this is NOT aria-hidden — the
+// staleness_warning sentence (same one the primary result's banner shows)
+// is the only place that information exists for screen-reader users.
+function AsOfCell({ row }) {
+  return (
+    <td className={row.staleness_warning ? 'as-of is-stale' : 'as-of'}>
+      {row.timeframe}
+      {row.staleness_warning && (
+        <span
+          className="stale-marker"
+          role="img"
+          title={row.staleness_warning}
+          aria-label={row.staleness_warning}
+        >
+          ⚠
+        </span>
+      )}
+    </td>
+  );
+}
+
 // Section B: a dwelling type's specific bed counts, revealed by expanding
 // its row in Section A below. `beds` is empty for dwelling types that have
 // an overall ALL-beds figure but no specific-bed rows underneath it (a
@@ -62,6 +84,7 @@ function BedsSubtable({ beds }) {
           <th scope="col">Beds</th>
           <th scope="col">Median rent</th>
           <th scope="col">Sample size</th>
+          <th scope="col">As of</th>
         </tr>
       </thead>
       <tbody>
@@ -70,6 +93,7 @@ function BedsSubtable({ beds }) {
             <th scope="row">{getNumberOfBedsLabel(bed.number_of_beds)}</th>
             <td>${bed.median_rent}/week</td>
             <td>{bed.total_bonds}<LowSampleMarker warning={bed.low_sample_warning} /></td>
+            <AsOfCell row={bed} />
           </tr>
         ))}
       </tbody>
@@ -85,7 +109,7 @@ function BedsSubtable({ beds }) {
 // not the native <details> this app uses everywhere else — the revealed
 // content needs to span the full table width via colSpan, which a
 // <details> confined to one cell can't do.
-function DwellingTypeBreakdownTable({ breakdown, footnote }) {
+function DwellingTypeBreakdownTable({ breakdown, footnote, staleFootnote }) {
   const [expandedTypes, setExpandedTypes] = useState(() => new Set());
 
   function toggle(dwellingType) {
@@ -108,6 +132,7 @@ function DwellingTypeBreakdownTable({ breakdown, footnote }) {
           <th scope="col">Dwelling type</th>
           <th scope="col">Median rent</th>
           <th scope="col">Sample size</th>
+          <th scope="col">As of</th>
         </tr>
       </thead>
       <tbody>
@@ -130,10 +155,11 @@ function DwellingTypeBreakdownTable({ breakdown, footnote }) {
                 </th>
                 <td>${dt.median_rent}/week</td>
                 <td>{dt.total_bonds}<LowSampleMarker warning={dt.low_sample_warning} /></td>
+                <AsOfCell row={dt} />
               </tr>
               {isExpanded && (
                 <tr className="dwelling-type-beds-row">
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <BedsSubtable beds={dt.beds} />
                   </td>
                 </tr>
@@ -142,11 +168,18 @@ function DwellingTypeBreakdownTable({ breakdown, footnote }) {
           );
         })}
       </tbody>
-      {footnote && (
+      {(footnote || staleFootnote) && (
         <tfoot>
-          <tr>
-            <td colSpan={3}>† {footnote}</td>
-          </tr>
+          {footnote && (
+            <tr>
+              <td colSpan={4}>† {footnote}</td>
+            </tr>
+          )}
+          {staleFootnote && (
+            <tr>
+              <td colSpan={4}>⚠ {staleFootnote}</td>
+            </tr>
+          )}
         </tfoot>
       )}
     </table>
@@ -236,7 +269,7 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </p>
       )}
 
-      <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} footnote={data.low_sample_footnote} />
+      <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} footnote={data.low_sample_footnote} staleFootnote={data.stale_footnote} />
     </div>
   );
 }
