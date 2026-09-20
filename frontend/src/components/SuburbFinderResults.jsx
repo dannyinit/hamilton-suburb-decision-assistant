@@ -35,7 +35,7 @@ function formatDistance(metres) {
 // stop in range count 0), and showing it would offer users a second, unscored
 // signal for "is this suburb good on transport". The title repeats the
 // legend's explanation for hover; touch users get it from the legend.
-const TRANSPORT_EXPLANATION = "Average across the suburb's area of how many different bus routes have a stop within a 5-minute walk (400m). The score gives each extra route a little less credit than the last, but a higher number never scores lower.";
+const TRANSPORT_EXPLANATION = "Average number of bus routes within a 5-minute walk (400 m) across the suburb; areas with no stop count as zero. More routes always score higher, each a little less than the last.";
 
 function formatTransport({ value }) {
   const rounded = value.toFixed(1);
@@ -194,10 +194,13 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
           fact about how to read the list, always true regardless of
           search. */}
       <p className="suburb-ranking-legend">
-        Each suburb below shows two rent figures: Median Rent (used to rank suburbs) and Cheapest option found (a specific dwelling type that fits your budget, used only to decide whether to include the suburb — not a second rank-worthy estimate).
+        <strong>Rent:</strong> Median Rent is used to rank suburbs. Cheapest option found is the cheapest dwelling type there, used only to check your budget, not to rank.
       </p>
       <p className="suburb-ranking-legend">
-        Transport: from a typical point in the suburb, roughly how many different bus routes have a stop within a 5-minute walk (400m in a straight line). It's an average across the suburb's area, so a suburb with areas far from any stop scores lower. The score gives each extra route a little less credit than the last, so having several routes helps, but a fifth adds less than a second; a higher number never scores lower.
+        <strong>Transport:</strong> the average number of bus routes within a 5-minute walk (400 m) across the suburb, where areas with no stop count as zero. More routes always score higher, though each extra route adds a little less.
+      </p>
+      <p className="suburb-ranking-legend">
+        <strong>Distance:</strong> straight-line distance from the suburb's centre to your chosen destination; shorter scores higher. Only shown and scored once you pick a destination.
       </p>
 
       <ol className="suburb-ranking">

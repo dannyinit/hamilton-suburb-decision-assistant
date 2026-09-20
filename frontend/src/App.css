@@ -441,9 +441,19 @@
 /* Suburb Finder */
 
 .suburb-ranking-legend {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.4rem;
   font-size: 0.8rem;
   color: #78716c;
+}
+
+.suburb-ranking-legend strong {
+  color: #57534e;
+}
+
+/* The last legend line sits directly above the ranked list; give it the
+   larger gap the single legend paragraph used to have. */
+.suburb-ranking-legend:last-of-type {
+  margin-bottom: 0.75rem;
 }
 
 .suburb-ranking {

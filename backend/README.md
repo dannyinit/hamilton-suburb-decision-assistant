@@ -437,6 +437,13 @@ OpenStreetMap outline (see the root README's dataset 5); other suburbs' water is
 negligible. `value` measures route *variety*, not service frequency — there is no
 timetable data.
 
+**Distance** is the straight-line (NZTM) distance from each suburb's Stats NZ centre
+point to the chosen destination, so it is approximate for large suburbs — the same
+centre-point limitation that motivated the transport redesign above, left as is because
+a straight-line figure to one point is all the criterion promises. It only exists when a
+`destination` is given (see "Optional destination"). The frontend legend describes it as
+"straight-line distance from the suburb's centre".
+
 **Scoring**, applied only across the suburbs that survive both hard constraints
 (not all 62 — ranking should reflect relative comparison among viable options).
 The rent criterion here is always the suburb-wide `median_rent`, never
