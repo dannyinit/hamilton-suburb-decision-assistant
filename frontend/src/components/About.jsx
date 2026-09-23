@@ -33,7 +33,9 @@ function About() {
           <li>
             <strong>Rental Price Check:</strong> shows the typical rent for a
             suburb, dwelling type and number of bedrooms, and tells you
-            whether a specific rent is below market, fair or above market.
+            whether a specific rent is below market, fair or above market. It
+            also lists the rent for every dwelling type and number of
+            bedrooms with data in that suburb.
           </li>
         </ul>
 
@@ -70,7 +72,8 @@ function About() {
           <li>Optionally enter a weekly rent to compare it with the market.</li>
           <li>
             Click "Check rental price" to see the median rent, the typical
-            price range and a breakdown by dwelling type.
+            price range and a breakdown by dwelling type and number of
+            bedrooms.
           </li>
         </ol>
 
