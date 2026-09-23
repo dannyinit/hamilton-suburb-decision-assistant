@@ -9,6 +9,9 @@ function NavBar() {
       <NavLink to="/rental-price-check" className={({ isActive }) => (isActive ? 'active' : undefined)}>
         Rental Price Check
       </NavLink>
+      <NavLink to="/about" className={({ isActive }) => (isActive ? 'active' : undefined)}>
+        About
+      </NavLink>
     </nav>
   );
 }

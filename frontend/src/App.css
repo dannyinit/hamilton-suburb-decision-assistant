@@ -36,9 +36,15 @@
   color: #0e7490;
 }
 
+/* With three tabs the labels no longer fit one row on a phone, and flex
+   was squeezing each label onto two lines (leaving the active underline at
+   a different height per tab). Labels now never break internally; the row
+   gap tightens on narrow screens, and if that still isn't enough (~320px),
+   whole tabs wrap onto a second row instead. */
 .nav-bar {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
   padding-bottom: 1rem;
   margin-bottom: 1.5rem;
   border-bottom: 1px solid #d6d3d1;
@@ -48,8 +54,15 @@
   color: #57534e;
   text-decoration: none;
   font-weight: 600;
+  white-space: nowrap;
   padding-bottom: 0.4rem;
   border-bottom: 2px solid transparent;
+}
+
+@media (max-width: 480px) {
+  .nav-bar {
+    column-gap: 1rem;
+  }
 }
 
 .nav-bar a.active {
@@ -639,6 +652,66 @@
 
 /* Data-source attribution footer (see components/DataSources.jsx). Small and
    muted like the other explanatory captions, but always visible. */
+
+/* About page. The author line sits tight under the <h2> in the footer's
+   muted grey, so it reads as a byline rather than a section of its own. The
+   card reuses .form-card's border/radius/background so it matches the
+   feature pages, but is capped at a readable line length since it's prose,
+   not a form/results layout that benefits from the full 1200px. */
+.about h2 {
+  margin-bottom: 0.25rem;
+}
+
+.about-author {
+  margin: 0 0 1.25rem;
+  font-size: 0.85rem;
+  color: #78716c;
+}
+
+.about-card {
+  max-width: 760px;
+  border: 1px solid #d6d3d1;
+  border-radius: 8px;
+  padding: 0.25rem 1.5rem 1.25rem;
+  background: #fff;
+  line-height: 1.55;
+}
+
+.about-card h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.15rem;
+}
+
+.about-card h4 {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 1rem;
+  color: #57534e;
+}
+
+.about-card p {
+  margin: 0 0 0.75rem;
+}
+
+.about-card ul,
+.about-card ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.4rem;
+}
+
+.about-card li {
+  margin-bottom: 0.35rem;
+}
+
+.about-note {
+  color: #57534e;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .about-card {
+    padding: 0.25rem 1rem 1rem;
+  }
+}
 
 .data-sources {
   margin-top: 2.5rem;

@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.jsx'
 import SuburbFinder from './components/SuburbFinder.jsx'
 import RentalPriceCheck from './components/RentalPriceCheck.jsx'
+import About from './components/About.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')).render(
           <Route index element={<Navigate to="/suburb-finder" replace />} />
           <Route path="suburb-finder" element={<SuburbFinder />} />
           <Route path="rental-price-check" element={<RentalPriceCheck />} />
+          <Route path="about" element={<About />} />
         </Route>
       </Routes>
     </BrowserRouter>
