@@ -30,11 +30,11 @@ curl "http://localhost:3001/api/rental-price-check-bed-availability"
 
 ## Normal exact-match lookup
 
-Flagstaff North, House, 2 beds — has good coverage, so this hits the exact row
-directly. `fallback_level` should be `'none'`.
+Flagstaff North, House, 1 bed — has a row in the latest quarter, so this hits the
+exact row directly. `fallback_level` should be `'none'`, with no `staleness_warning`.
 
 ```
-curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=2"
+curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=1"
 ```
 
 ## Intermediate fallback case (dwelling type kept, beds widened)
@@ -61,22 +61,26 @@ curl "http://localhost:3001/api/rental-price-check?sa2_code=175400&dwelling_type
 
 ## NO_DATA case
 
-Te Rapa North has zero rent rows at all, even the ALL/ALL fallback. Response
-should have `insufficient_data: true` and no numbers.
+Not reproducible with the current data: since the Q2 2026 pull every suburb has at
+least an ALL/ALL row (Te Rapa North, the old example, gained Q1 2026 data). A suburb
+with zero rent rows would get `insufficient_data: true` and no numbers.
+
+## Stale row
+
+Resthill, Flat has no row newer than Q1 2020. Numbers are still returned, plus a
+`staleness_warning` that names the quarter ("This data is from Q1 2020, 25 quarters
+older than the most recent data available (Q2 2026).").
 
 ```
-curl "http://localhost:3001/api/rental-price-check?sa2_code=175200&dwelling_type=House&number_of_beds=ALL"
+curl "http://localhost:3001/api/rental-price-check?sa2_code=181000&dwelling_type=Flat&number_of_beds=ALL"
 ```
 
-## STALE case
+## Empty breakdown
 
-Te Rapa South's only data is ~7 quarters old. Numbers are still returned, plus a
-`staleness_warning` that names the quarter ("This data is from Q2 2024, 7 quarters
-older than the most recent data available (Q1 2026).").
-
-This suburb has no other dwelling-type rows, so `dwelling_type_breakdown` is `[]`
-and neither footnote is attached (the frontend shows a "no breakdown available"
-message instead of a table).
+Te Rapa South has no dwelling-type rows at all, only ALL/ALL and ALL/2-beds, so
+`dwelling_type_breakdown` is `[]` and neither footnote is attached (the frontend shows
+a "no breakdown available" message instead of a table). Its ALL/ALL row is from Q1
+2026, one quarter behind, so it also carries a `staleness_warning`.
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=176300&dwelling_type=ALL&number_of_beds=ALL"
@@ -85,12 +89,12 @@ curl "http://localhost:3001/api/rental-price-check?sa2_code=176300&dwelling_type
 ## Breakdown with a current primary result but stale rows
 
 Flagstaff North, House: the primary result is current (`quarters_stale: 0`,
-`staleness_warning: null`), but the House 2-bed and 3-bed rows in
-`dwelling_type_breakdown[].beds` are 2 quarters old and the 5+ row is 6, each with its
-own `staleness_warning`. Because at least one breakdown row is stale, the response also
+`staleness_warning: null`), but the House 2-, 3-, 4- and 5+-bed rows in
+`dwelling_type_breakdown[].beds` are 2, 8, 1 and 7 quarters old, each with its own
+`staleness_warning`. Because at least one breakdown row is stale, the response also
 carries `stale_footnote` — describing the table, not the primary result. Also shows
-`timeframe_label` (`"Q1 2026"`) and, on the primary result only, `timeframe_months`
-(`"Jan–Mar"`).
+`timeframe_label` (`"Q2 2026"`) and, on the primary result only, `timeframe_months`
+(`"Apr–Jun"`).
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House"
@@ -98,9 +102,9 @@ curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type
 
 ## Breakdown with mixed row ages (Pukete East)
 
-Pukete East, House (SA2 176000): the all-beds and 1-/3-bed rows are current, while the
-2-bed row is from Q1 2022 (16 quarters old) and the 4-bed row from Q4 2023 (9 quarters
-old). The bed rows' `total_bonds` can't be summed to the all-beds figure — they come
+Pukete East, House (SA2 176000): the all-beds and 3-bed rows are current, while the
+1-bed row is from Q1 2026 (1 quarter old), the 2-bed row from Q3 2024 (7 quarters old)
+and the 4-bed row from Q2 2024 (8 quarters old). The bed rows' `total_bonds` can't be summed to the all-beds figure — they come
 from different quarters, and MBIE rounds each row independently. Also has
 `low_sample_warning: true` bed rows, so `low_sample_footnote` is present.
 
@@ -123,7 +127,7 @@ curl "http://localhost:3001/api/suburb-finder-examples"
 
 Leaving `number_of_beds` out entirely means "any bed count" and resolves to the
 standard `number_of_beds=ALL` aggregate — this should return an identical response
-to the normal exact-match example above with `number_of_beds=ALL` added explicitly.
+to the same request with `number_of_beds=ALL` added explicitly.
 
 ```
 curl "http://localhost:3001/api/rental-price-check?sa2_code=175300&dwelling_type=House"

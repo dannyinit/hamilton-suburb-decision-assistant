@@ -90,9 +90,10 @@ Raw data files are included directly in `raw/` for reproducibility (they were no
 
 ### 1. MBIE Rental Bond data
 - File: `mbie_rental_bond.csv`
-- Source: https://www.tenancy.govt.nz/about-tenancy-services/data-and-statistics/rental-bond-data/
+- Source: https://www.tenancy.govt.nz/about-tenancy-services/data-and-statistics/rental-bond-data/ — the "Detailed quarterly report" CSV (published as `Detailed-Quarterly-Tenancy-Q1-2020-Q3-2026.csv`, labelled "January 2020 to April 2026"; despite the file name its latest `TimeFrame` is 2026-04-01, i.e. Q2 2026). Downloaded 2026-09-28.
 - Licence: Creative Commons Attribution 3.0 New Zealand. The publisher asks that you credit "The Ministry of Business, Innovation and Employment" as the source.
 - Notes: Location Id is a Statistics NZ SA2 2019 area code. Exclude Location Id = -99 and NaN before suburb-level analysis.
+- Updating: replace the whole file, don't append the new quarter. Each release revises earlier quarters too (late bond lodgements): moving from the Q1 2026 file to this one changed about 22,000 of the overlapping rows' medians, and added or dropped rows in past quarters. `TimeFrame` has also changed format between releases (`1/01/2026` in the Q1 2026 file, `2026-04-01` in this one); the pipeline accepts both and fails loudly on anything else.
 
 ### 2. Waikato GTFS bus stop data (BUSIT)
 - File: `bus_stops_hamilton.csv` (from the `BUS_STOP_HAMILTON` layer, NOT `BUS_ROUTE_HAMILTON`)
@@ -122,7 +123,7 @@ Raw data files are included directly in `raw/` for reproducibility (they were no
 
 Built by `scripts/build_hamilton_db.py`. All quarter/staleness figures are computed
 against the true latest `TimeFrame` found anywhere in the Hamilton-filtered rental
-data (parsed as a real date, not string-compared) — currently **2026-Q1**. This is
+data (parsed as a real date, not string-compared) — currently **2026-Q2**. This is
 recomputed on every run, so it moves forward automatically as MBIE publishes new
 quarters; it is never hardcoded.
 
@@ -148,7 +149,7 @@ declared in the schema will silently not be checked.
 | easting, northing | REAL | NZTM2000 |
 | latitude, longitude | REAL | WGS84 |
 
-### `rent` (848 rows, grain = sa2_code + dwelling_type + number_of_beds)
+### `rent` (903 rows, grain = sa2_code + dwelling_type + number_of_beds)
 | column | type | notes |
 |---|---|---|
 | sa2_code | INTEGER FK→suburbs | |
@@ -194,9 +195,10 @@ rent figure used for ranking/budget decisions.
 
 `STALE_THRESHOLD_QUARTERS = 4` (one year), set as a constant in `build_hamilton_db.py`.
 
-As of the current data pull: **Te Rapa North** = `NO_DATA` (zero rows in `mbie_rental_bond.csv`
-for this SA2, in any dwelling type or bed count), **Te Rapa South** = `STALE` (7 quarters
-behind), all other 60 suburbs = `CURRENT`.
+As of the current data pull (Q2 2026): all 62 suburbs = `CURRENT`. In the previous (Q1
+2026) pull, **Te Rapa North** was `NO_DATA` (zero rows for this SA2) and **Te Rapa South**
+`STALE` (7 quarters behind); MBIE's revised file added Q1 2026 rows for both, so neither
+status currently occurs in the real data, though the pipeline and backend still handle them.
 
 ### `destinations` (4 rows, fixed reference data)
 The 4 destinations users can pick, per the project proposal's functional requirements. Not
@@ -234,7 +236,7 @@ rules that motivated the design are still accurate and kept here for context:
   both an `insufficient_data` and an `exceeds_budget` reason at once.
 - **Feature 2 — Rental Price Check (lookup):** never blocks a suburb from selection. If `rent` has
   zero rows for the suburb at all, return "no data available" (this falls out naturally from the
-  data for Te Rapa North — no special-casing needed). Otherwise show the row for the requested
+  data — no special-casing needed; no suburb is in this state as of the Q2 2026 pull). Otherwise show the row for the requested
   dwelling_type/number_of_beds and, whenever that row's `quarters_stale >= 1`, surface a warning
   stating exactly how many quarters old it is.
 - Rationale for the different thresholds (4 quarters vs. 1 quarter): Feature 1 is a ranking engine

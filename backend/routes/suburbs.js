@@ -14,8 +14,9 @@ const router = express.Router();
 // only), not whether a suburb should be selectable at all. Rental Price
 // Check already reports its own per-request insufficient_data/
 // staleness_warning independent of this table (see rentalPriceCheck.js) —
-// filtering here would hide suburbs like Te Rapa North, which is exactly
-// the NO_DATA demo case in test-examples.md.
+// filtering here would hide NO_DATA suburbs (Te Rapa North, until the Q2
+// 2026 data pull), exactly the ones whose "no data" response the user
+// should still be able to reach.
 const suburbs = db.prepare('SELECT sa2_code, sa2_name FROM suburbs ORDER BY sa2_name').all();
 
 router.get('/suburbs', (req, res) => {

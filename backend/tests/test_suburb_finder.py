@@ -86,9 +86,10 @@ check("no destination -> identical excluded set as with destination", no_dest_ex
 
 # N=1 exact tie, no destination: both remaining criteria hit the tie branch,
 # and since the two weights always sum to 1, overall_score is still 0.5.
-# $150 is the N=1 boundary under lowest_rent-based filtering (Hamilton
-# Central's lowest_rent is $125, the next cheapest suburb's is $180).
-code, body = call({"budget": 150})
+# $130 is inside the N=1 window under lowest_rent-based filtering (Hamilton
+# Central's lowest_rent is $125, the next cheapest suburb's is Hamilton East
+# Cook's $140).
+code, body = call({"budget": 130})
 r = body["results"]
 check("no destination, N=1 -> exactly 1 result, overall_score 0.5", code == 200 and len(r) == 1 and r[0]["overall_score"] == 0.5, r)
 check("no destination, N=1 -> score_breakdown has no distance key", "distance" not in r[0]["score_breakdown"], r[0]["score_breakdown"])
@@ -114,7 +115,7 @@ check("empty result set -> 200, results=[], no_suburbs_in_budget", code == 200 a
 check("empty result set cheapest hint mentions $125", "$125" in body.get("message", ""), body.get("message"))
 
 # --- 4. N=1 exact tie (with destination) ---
-code, body = call({"budget": 150, "destination": "The Base"})
+code, body = call({"budget": 130, "destination": "The Base"})
 r = body["results"]
 check("N=1 -> exactly 1 result, rank 1, overall_score 0.5", code == 200 and len(r) == 1 and r[0]["rank"] == 1 and r[0]["overall_score"] == 0.5, r)
 
@@ -128,25 +129,28 @@ check("budget=500 -> 39 results", len(r) == 39, len(r))
 check("budget=500 -> ranked descending by overall_score", all(r[i]["overall_score"] >= r[i+1]["overall_score"] for i in range(len(r)-1)), [x["overall_score"] for x in r])
 check("budget=500 -> Hamilton Central ranks #1 (equal weights)", r[0]["sa2_name"] == "Hamilton Central", r[0])
 hc = next(x for x in r if x["sa2_name"] == "Hamilton Central")
+# rent normalised_score is 0.6375: its $495 median against the survivors'
+# $350-$750 range, (750 - 495) / 400.
 # distance normalised_score is 0.4659, not the raw-distance figure of 0.468 --
 # distance_m (5982.44) rounds to 6000m for scoring (see the 100m rounding step).
 # transport normalised_score is 1: Hamilton Central's 9.49 routes and
-# Kirikiriroa's 9.54 both round to 3.10 on the (sqrt-of-average) scoring
+# Kirikiriroa's 9.54 both round to 3.08 on the (sqrt-of-average) scoring
 # scale, so they tie at the max.
-manual = round((0.8537 + 1 + 0.4659) / 3, 4)
+manual = round((0.6375 + 1 + 0.4659) / 3, 4)
 check("Hamilton Central overall_score matches manual calc", abs(hc["overall_score"] - manual) < 0.001, (hc["overall_score"], manual))
 
 # --- 6. Full population (very high budget) ---
 code, body = call({"budget": 10000, "destination": "The Base"})
 r = body["results"]
 ex = body["excluded"]
-check("budget=10000 -> 60 results (all CURRENT suburbs)", len(r) == 60, len(r))
-check("budget=10000 -> only 2 excluded, both insufficient_data", len(ex) == 2 and all(e["reason"] == "insufficient_data" for e in ex), ex)
-te_rapa_names = {e["sa2_name"] for e in ex}
-check("budget=10000 -> Te Rapa North and South both excluded", te_rapa_names == {"Te Rapa North", "Te Rapa South"}, te_rapa_names)
+# Since the Q2 2026 data pull every suburb is CURRENT (MBIE's revised file
+# added Q1 2026 rows for Te Rapa North and South, the two suburbs the Q1 2026
+# pull excluded), so a budget this high includes all 62.
+check("budget=10000 -> 62 results (all CURRENT suburbs)", len(r) == 62, len(r))
+check("budget=10000 -> nothing excluded", len(ex) == 0, ex)
 check("budget=10000 -> included + excluded = 62", len(r) + len(ex) == 62, (len(r), len(ex)))
 ranks = [x["rank"] for x in r]
-check("budget=10000 -> ranks are 1..60 with no gaps/dupes", ranks == list(range(1, 61)), ranks[:5])
+check("budget=10000 -> ranks are 1..62 with no gaps/dupes", ranks == list(range(1, 63)), ranks[:5])
 
 # --- 7. Each destination individually, moderate budget ---
 nearest_by_dest = {}
@@ -198,15 +202,15 @@ check("results + excluded covers all 62 suburbs", len(included_codes) + len(excl
 
 # --- 12. lowest_rent: the smoking-gun test that the budget hard constraint
 # actually uses lowest_rent, not median_rent ---
-# Hamilton Central's suburb-wide median_rent is $400 (would fail a $150
+# Hamilton Central's suburb-wide median_rent is $495 (would fail a $130
 # budget under the old rule), but its lowest_rent (a Boarding House row) is
-# $125 (passes a $150 budget). If this suburb is included at budget=150,
+# $125 (passes a $130 budget). If this suburb is included at budget=130,
 # the hard constraint is genuinely reading lowest_rent, not median_rent.
-code, body = call({"budget": 150, "destination": "The Base"})
+code, body = call({"budget": 130, "destination": "The Base"})
 r = body["results"]
-check("lowest_rent smoking gun: Hamilton Central included at budget=150 despite median_rent > budget", len(r) == 1 and r[0]["sa2_name"] == "Hamilton Central", r)
+check("lowest_rent smoking gun: Hamilton Central included at budget=130 despite median_rent > budget", len(r) == 1 and r[0]["sa2_name"] == "Hamilton Central", r)
 if r:
-    check("lowest_rent smoking gun: median_rent (400) > budget but lowest_rent.value (125) <= budget", r[0]["score_breakdown"]["rent"]["value"] == 400 and r[0]["lowest_rent"]["value"] == 125, r[0])
+    check("lowest_rent smoking gun: median_rent (495) > budget but lowest_rent.value (125) <= budget", r[0]["score_breakdown"]["rent"]["value"] == 495 and r[0]["lowest_rent"]["value"] == 125, r[0])
 
 # --- 13. lowest_rent structure and low_sample_warning correctness ---
 code, body = call({"budget": 10000, "destination": "The Base"})
@@ -216,9 +220,14 @@ check("budget=10000 -> every result has a lowest_rent object with the expected k
     set(x["lowest_rent"].keys()) == {"value", "dwelling_type", "number_of_beds", "total_bonds", "low_sample_warning", "low_sample_note"}
     for x in r
 ), [set(x["lowest_rent"].keys()) for x in r[:1]])
-check("budget=10000 -> lowest_rent.value never exceeds the median_rent used for scoring", all(
-    x["lowest_rent"]["value"] <= x["score_breakdown"]["rent"]["value"] for x in r
-), [(x["sa2_name"], x["lowest_rent"]["value"], x["score_breakdown"]["rent"]["value"]) for x in r if x["lowest_rent"]["value"] > x["score_breakdown"]["rent"]["value"]])
+# lowest_rent.value is NOT guaranteed to be <= the ALL/ALL median_rent used
+# for scoring: the suburb-wide median also covers bonds that no published
+# specific row does (MBIE suppresses thin cells), e.g. Queenwood's cheapest
+# specific row (House, 1 bed, $645) sits above its $640 ALL/ALL median. What
+# must hold is that every included suburb had a real figure to check.
+check("budget=10000 -> every included suburb has a numeric lowest_rent.value", all(
+    isinstance(x["lowest_rent"]["value"], (int, float)) for x in r
+), [(x["sa2_name"], x["lowest_rent"]) for x in r if not isinstance(x["lowest_rent"]["value"], (int, float))])
 check("budget=10000 -> low_sample_warning true iff total_bonds <= 6, for every result", all(
     x["lowest_rent"]["low_sample_warning"] == (x["lowest_rent"]["total_bonds"] <= 6) for x in r
 ), [(x["sa2_name"], x["lowest_rent"]) for x in r if x["lowest_rent"]["low_sample_warning"] != (x["lowest_rent"]["total_bonds"] <= 6)])
@@ -226,7 +235,7 @@ check("budget=10000 -> low_sample_note is non-empty iff low_sample_warning is tr
     bool(x["lowest_rent"]["low_sample_note"]) == x["lowest_rent"]["low_sample_warning"] for x in r
 ), [(x["sa2_name"], x["lowest_rent"]) for x in r if bool(x["lowest_rent"]["low_sample_note"]) != x["lowest_rent"]["low_sample_warning"]])
 warned = sum(1 for x in r if x["lowest_rent"]["low_sample_warning"])
-check("budget=10000 -> 50/60 suburbs carry low_sample_warning (the only meaningful split the real data supports)", warned == 50, warned)
+check("budget=10000 -> 51/62 suburbs carry low_sample_warning (the only meaningful split the real data supports)", warned == 51, warned)
 
 # budget=10000 has no exceeds_budget exclusions at all (see section 6) --
 # need a tighter budget to check that reason's excluded entries also carry
@@ -237,25 +246,24 @@ check("budget=500 -> exceeds_budget-excluded entries also carry a lowest_rent ob
 
 # --- 14. Rounding-based tie behavior (rent to $5, distance to 100m) ---
 # Confirmed against real data before this was written: at budget=600 with no
-# destination, Hamilton East Cook ($568) and Forest Lake ($570) are 2 apart
-# raw but both round to $570 -- they should score identically instead of
+# destination, Pukete East ($618) and Saint Andrews East ($620) are 2 apart
+# raw but both round to $620 -- they should score identically instead of
 # being ranked apart on noise smaller than MBIE's own reporting granularity.
 code, body = call({"budget": 600})
 r = body["results"]
 by_name = {x["sa2_name"]: x for x in r}
-hec = by_name.get("Hamilton East Cook")
-fl = by_name.get("Forest Lake (Hamilton City)")
-check("rent rounding: Hamilton East Cook ($568) and Forest Lake ($570) present", hec is not None and fl is not None, list(by_name.keys())[:5])
-if hec and fl:
-    check("rent rounding: raw values are 2 apart, not equal", hec["score_breakdown"]["rent"]["value"] != fl["score_breakdown"]["rent"]["value"], (hec["score_breakdown"]["rent"]["value"], fl["score_breakdown"]["rent"]["value"]))
-    check("rent rounding: both round to $570 and tie on rentScore", hec["score_breakdown"]["rent"]["normalised_score"] == fl["score_breakdown"]["rent"]["normalised_score"], (hec["score_breakdown"]["rent"], fl["score_breakdown"]["rent"]))
+pe = by_name.get("Pukete East")
+sae = by_name.get("Saint Andrews East")
+check("rent rounding: Pukete East ($618) and Saint Andrews East ($620) present", pe is not None and sae is not None, list(by_name.keys())[:5])
+if pe and sae:
+    check("rent rounding: raw values are 2 apart, not equal", pe["score_breakdown"]["rent"]["value"] != sae["score_breakdown"]["rent"]["value"], (pe["score_breakdown"]["rent"]["value"], sae["score_breakdown"]["rent"]["value"]))
+    check("rent rounding: both round to $620 and tie on rentScore", pe["score_breakdown"]["rent"]["normalised_score"] == sae["score_breakdown"]["rent"]["normalised_score"], (pe["score_breakdown"]["rent"], sae["score_breakdown"]["rent"]))
 
-# Fairfield ($573) rounds to $575 -- a different bucket from both $570 and
-# $580 -- so it should NOT tie with either, confirming rounding creates
-# ties only within a bucket, not indiscriminately.
-ff = by_name.get("Fairfield (Hamilton City)")
-kahikatea = by_name.get("Kahikatea")  # $545, unrelated bucket, sanity contrast
-check("rent rounding: Fairfield ($573->$575) does not tie with Forest Lake ($570->$570)", ff is not None and fl is not None and ff["score_breakdown"]["rent"]["normalised_score"] != fl["score_breakdown"]["rent"]["normalised_score"], (ff, fl) if ff and fl else None)
+# Hamilton Lake ($623) rounds to $625 -- a different bucket from $620, only
+# $5 away from Pukete East raw -- so it should NOT tie, confirming rounding
+# creates ties only within a bucket, not indiscriminately.
+hl_rent = by_name.get("Hamilton Lake")
+check("rent rounding: Hamilton Lake ($623->$625) does not tie with Pukete East ($618->$620)", hl_rent is not None and pe is not None and hl_rent["score_breakdown"]["rent"]["normalised_score"] != pe["score_breakdown"]["rent"]["normalised_score"], (hl_rent, pe) if hl_rent and pe else None)
 
 # Distance: at budget=600 with University of Waikato, Silverdale (1078m),
 # Hillcrest West (1146m) and Hillcrest East (1111m) are all within 100m of
@@ -347,6 +355,36 @@ if all(trio_t):
 bee, swa, rs = by_name.get("Beerescourt"), by_name.get("Swarbrick"), by_name.get("Rototuna South")
 check("transport rounding: Beerescourt (2.97) no longer ties with Swarbrick (2.84)", bee is not None and swa is not None and bee["normalised_score"] > swa["normalised_score"], (bee, swa))
 check("transport rounding: Swarbrick (2.842) and Rototuna South (2.835) still tie", swa is not None and rs is not None and swa["normalised_score"] == rs["normalised_score"], (swa, rs))
+
+# --- 16. lowest_rent fallback to an all-dwelling-types row ---
+# Te Rapa South has no specific dwelling-type row at all, only ALL/ALL ($515)
+# and ALL/2-beds ($515). Its budget figure falls back to the cheapest ALL row
+# instead of coming back null -- which a bare `null > budget` check once let
+# through at every budget, even $150.
+code, body = call({"budget": 10000, "destination": "The Base"})
+trs = next((x for x in body["results"] if x["sa2_name"] == "Te Rapa South"), None)
+check("Te Rapa South: lowest_rent falls back to an ALL dwelling_type row ($515)", trs is not None and trs["lowest_rent"]["dwelling_type"] == "ALL" and trs["lowest_rent"]["value"] == 515, trs and trs["lowest_rent"])
+check("every other suburb's lowest_rent is still a specific dwelling type", all(
+    x["lowest_rent"]["dwelling_type"] != "ALL" for x in body["results"] if x["sa2_name"] != "Te Rapa South"
+), [x["sa2_name"] for x in body["results"] if x["lowest_rent"]["dwelling_type"] == "ALL" and x["sa2_name"] != "Te Rapa South"])
+
+code, body = call({"budget": 510, "destination": "The Base"})
+trs_ex = next((e for e in body["excluded"] if e["sa2_name"] == "Te Rapa South"), None)
+check("Te Rapa South: excluded at budget=510 as exceeds_budget, not passed through", trs_ex is not None and trs_ex["reason"] == "exceeds_budget" and trs_ex["lowest_rent"]["value"] == 515, trs_ex)
+check("Te Rapa South: not in results at budget=510", all(x["sa2_name"] != "Te Rapa South" for x in body["results"]))
+
+code, body = call({"budget": 515, "destination": "The Base"})
+check("Te Rapa South: included at budget=515 (its fallback figure)", any(x["sa2_name"] == "Te Rapa South" for x in body["results"]))
+
+# The bug's exact symptom: a $150 budget leaves only Hamilton Central ($125)
+# and Hamilton East Cook ($140) -- never Te Rapa South.
+code, body = call({"budget": 150, "destination": "The Base"})
+names = {x["sa2_name"] for x in body["results"]}
+check("budget=150 -> only Hamilton Central and Hamilton East Cook", names == {"Hamilton Central", "Hamilton East Cook"}, names)
+
+# The null guard itself (a suburb with no rent figure at all is excluded, never
+# compared against the budget) can't be reached with the real data, so it is
+# tested against a modified copy of the database in test_null_budget_rent.py.
 
 # --- summary ---
 passed = sum(1 for s, _, _ in results_log if s == "PASS")

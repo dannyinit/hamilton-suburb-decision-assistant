@@ -10,9 +10,10 @@
 // count is 6 (confirmed: no row anywhere in the raw data is below 6).
 // Confirmed against real data (see suburbFinder.js's git history): a
 // two-tier mild/strong design was tried first, but across all 60 CURRENT
-// suburbs a lowest_rent row's total_bonds is only ever 6, 9, 12, or 15 --
+// suburbs a lowest_rent row's total_bonds was only ever 6, 9, 12, or 15 --
 // any boundary above 15 flagged 100% of suburbs, and <=6 is the only split
-// point the real data actually supports.
+// point the real data actually supports. Still true in the Q2 2026 pull
+// (all 62 suburbs: only 6, 9 or 12).
 const LOW_SAMPLE_THRESHOLD = 6;
 
 function lowSampleWarning(totalBonds) {

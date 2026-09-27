@@ -324,10 +324,14 @@ router.get('/rental-price-check-bed-availability', (req, res) => {
 // Static reference data for demos — no DB lookups, just a fixed list of
 // example URLs so each case can be opened directly in a browser without
 // having to remember the exact query params. Mirrors test-examples.md.
+//
+// No NO_DATA example: since the Q2 2026 data pull every suburb has at least
+// an ALL/ALL row (Te Rapa North, the old example, gained Q1 2026 data), so
+// that response can't be shown with real data. The code path is unchanged.
 const RENTAL_PRICE_CHECK_EXAMPLES = [
   {
-    description: 'Normal exact match: Flagstaff North, House, 2 beds has good coverage, so this hits the exact row directly (fallback_level "none").',
-    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=2',
+    description: 'Normal exact match: Flagstaff North, House, 1 bed has a row in the latest quarter, so this hits the exact row directly (fallback_level "none") with no staleness warning.',
+    url: '/api/rental-price-check?sa2_code=175300&dwelling_type=House&number_of_beds=1',
   },
   {
     description: 'Intermediate fallback tier: Flagstaff North has no House/6-beds row, but does have a House/ALL row, so this falls back to the same dwelling type with all bed counts (fallback_level "dwelling_type").',
@@ -338,12 +342,8 @@ const RENTAL_PRICE_CHECK_EXAMPLES = [
     url: '/api/rental-price-check?sa2_code=175400&dwelling_type=Room&number_of_beds=ALL',
   },
   {
-    description: 'NO_DATA: Te Rapa North has zero rent rows at all, even the ALL/ALL fallback, so the response has insufficient_data true and no numbers.',
-    url: '/api/rental-price-check?sa2_code=175200&dwelling_type=House&number_of_beds=ALL',
-  },
-  {
-    description: 'STALE: Te Rapa South only data is about 7 quarters old. Numbers are still returned, plus a staleness_warning stating exactly how old.',
-    url: '/api/rental-price-check?sa2_code=176300&dwelling_type=ALL&number_of_beds=ALL',
+    description: 'Stale row: Resthill, Flat has no row newer than Q1 2020, 25 quarters before the latest. Numbers are still returned, plus a staleness_warning stating exactly how old.',
+    url: '/api/rental-price-check?sa2_code=181000&dwelling_type=Flat&number_of_beds=ALL',
   },
   {
     description: 'Invalid input: number_of_beds=99 is not in the documented value set, so this is rejected with a 400 instead of silently falling through to NO_DATA.',

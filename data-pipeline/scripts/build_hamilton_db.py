@@ -102,6 +102,22 @@ def _quarter_index(dt: pd.Series) -> pd.Series:
     return dt.dt.year * 4 + (dt.dt.month - 1) // 3
 
 
+TIMEFRAME_FORMATS = ["%Y-%m-%d", "%d/%m/%Y"]
+
+
+def _parse_timeframe(timeframe: pd.Series) -> pd.Series:
+    """Parse MBIE's TimeFrame with the first known format that fits every row. Each format is
+    explicit, so an unknown one fails loudly instead of being guessed (a day/month mix-up
+    would silently shift quarters)."""
+    for fmt in TIMEFRAME_FORMATS:
+        try:
+            return pd.to_datetime(timeframe, format=fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"TimeFrame matches none of the known formats {TIMEFRAME_FORMATS}: "
+                     f"e.g. {timeframe.iloc[0]!r}")
+
+
 def load_rental_bond(rental_path: Path, hamilton_sa2: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the MBIE rental bond data and, for each Hamilton suburb x dwelling type
@@ -121,10 +137,10 @@ def load_rental_bond(rental_path: Path, hamilton_sa2: pd.DataFrame) -> pd.DataFr
     df["Number Of Beds"] = df["Number Of Beds"].astype("object")
     df.loc[df["Number Of Beds"].isna(), "Number Of Beds"] = None
 
-    # TimeFrame is "D/MM/YYYY" (day never padded, e.g. "1/01/2026" vs "1/10/2025").
-    # Comparing/aggregating it as a plain string is lexicographic, not chronological,
-    # and silently picks the wrong "latest" row across a year boundary. Parse it first.
-    df["tf_dt"] = pd.to_datetime(df["TimeFrame"], format="%d/%m/%Y")
+    # TimeFrame must be parsed as a date: comparing it as a plain string can pick the wrong
+    # "latest" row. MBIE has used two formats: ISO "2026-04-01" (the Q2 2026 file) and an
+    # unpadded "1/01/2026" (the earlier Q1 2026 file, which also sorts wrongly as text).
+    df["tf_dt"] = _parse_timeframe(df["TimeFrame"])
 
     group_cols = ["sa2_code", "Dwelling Type", "Number Of Beds"]
     latest_mask = df.groupby(group_cols, dropna=False)["tf_dt"].transform("max") == df["tf_dt"]

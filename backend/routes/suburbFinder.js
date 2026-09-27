@@ -10,9 +10,11 @@ const destinationsById = db.prepare('SELECT destination_id, name FROM destinatio
 const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 
 // Minimum-meaningful-range floors for normalisation, precomputed from the
-// 60 sa2_data_status='CURRENT' suburbs (the stable population everything
-// normalises against — never recomputed from a request's budget-filtered
-// subset, or the floor wouldn't protect against anything). Rent and
+// sa2_data_status='CURRENT' suburbs — the stable population everything
+// normalises against, never recomputed from a request's budget-filtered
+// subset, or the floor wouldn't protect against anything. That's all 62
+// suburbs since the Q2 2026 data pull; re-deriving then gave the same
+// values. Rent and
 // transport are flat constants; distance is 10% of each destination's own
 // full-population range, since the four destinations sit at genuinely
 // different distances from the city (confirmed against real geography
@@ -22,14 +24,12 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // This guards a different scenario from ROUNDING_STEP below: it stops a
 // genuinely tight population (e.g. a heavily budget-narrowed `included`
 // set) from being stretched to fill [0,1] as if its small spread were the
-// full story. Confirmed against real data across every $5-step budget:
-// with a normally-sized `included` set this floor never actually engages
-// for rent, and for distance only at the 2-suburbs-left extreme for 2 of 4
-// destinations — it's a rare-edge-case safety net, not the mechanism doing
-// routine work. Transport's floor was re-checked after it changed to walk-based
-// route reach: across all 205 $5-step budgets ($100–$1,200) leaving >= 2
-// suburbs, the survivors' transport scoring input never spans less than
-// ~1.8, so it doesn't engage either.
+// full story. Confirmed against the Q2 2026 data across every $5-step
+// budget from $100 to $1,200 that leaves >= 2 suburbs (216 of them), for
+// all four destinations: the rent floor engages only at $125–$135, where
+// just 2 suburbs survive; the distance floor never engages; and the
+// survivors' transport scoring input never spans less than ~1.9. It's a
+// rare-edge-case safety net, not the mechanism doing routine work.
 const RENT_THRESHOLD = 50;
 const TRANSPORT_THRESHOLD = 0.3;
 const DISTANCE_THRESHOLDS = {
@@ -42,8 +42,8 @@ const DISTANCE_THRESHOLDS = {
 // Rounding step applied to a criterion's raw value before it ever reaches
 // normaliseCriterion, so two suburbs differing by less than the data's real
 // precision score identically instead of being ranked apart on noise.
-// Rent: 55/60 CURRENT suburbs' median_rent already lands on an exact
-// multiple of $5 (the other 5 are off by $1-3) — $5 is the data's own
+// Rent: 57/62 CURRENT suburbs' median_rent already lands on an exact
+// multiple of $5 (the other 5 are off by $2) — $5 is the data's own
 // granularity, not a guess. Distance: adjacent suburbs' distance_m can
 // differ by fractions of a metre (e.g. 0.14m) — an artifact of computing
 // straight-line distance from an SA2 centroid, with no meaningful
@@ -56,7 +56,7 @@ const DISTANCE_THRESHOLDS = {
 // by at most 0.063 routes (0.015 on the sqrt scale), and 0.02 is chosen so a
 // tie never spans more than that noise — at this step the largest average
 // gap between two tied suburbs is 0.045 routes. It's a judgment call, in the
-// same way distance's 100m is, and leaves 37 distinct values across the 60
+// same way distance's 100m is, and leaves 38 distinct values across the 62
 // CURRENT suburbs. A coarser 0.05 was tried first and dropped: it tied
 // suburbs up to 0.136 routes apart (Queenwood 2.83 / Beerescourt 2.97), about
 // double the noise and visible in the UI as "2.8 vs 3.0" scoring the same.
@@ -113,15 +113,23 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
 // constraint actually compares against, so a suburb where e.g. Rooms are
 // genuinely affordable isn't excluded just because its House-dominated
 // overall median looks expensive. No minimum sample size is required
-// (see lowSampleWarning in ../lowSampleWarning.js for why) and every
-// CURRENT suburb has at least a House row, so this is never null for a
-// row that reaches the budget check.
+// (see lowSampleWarning in ../lowSampleWarning.js for why).
+//
+// A suburb with no specific row at all (Te Rapa South in the Q2 2026 pull:
+// only ALL/ALL and ALL/2-beds rows) falls back to its cheapest
+// dwelling_type = 'ALL' row instead — specific rows always sort first, so
+// the fallback only applies when there are none. A suburb with no row
+// with a median at all still comes back null here; the budget check below
+// excludes it rather than comparing null against the budget.
 const CHEAPEST_SPECIFIC_ROW_CTE = `
   WITH cheapest AS (
     SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds,
-           ROW_NUMBER() OVER (PARTITION BY sa2_code ORDER BY median_rent ASC) AS rn
+           ROW_NUMBER() OVER (
+             PARTITION BY sa2_code
+             ORDER BY (dwelling_type = 'ALL') ASC, median_rent ASC
+           ) AS rn
     FROM rent
-    WHERE dwelling_type != 'ALL' AND median_rent IS NOT NULL
+    WHERE median_rent IS NOT NULL
   )
 `;
 
@@ -295,6 +303,22 @@ function computeSuburbFinder(query) {
       continue;
     }
 
+    // No rent figure to check the budget against, even after the ALL
+    // fallback in `cheapest`: exclude, never pass through. A bare
+    // `null > budget` is false in JS, which would silently let the suburb
+    // through at any budget. Reported as insufficient_data, with
+    // data_status still 'CURRENT', which is how the frontend tells this
+    // apart from a NO_DATA/STALE exclusion.
+    if (row.lowest_rent === null) {
+      excluded.push({
+        sa2_code: row.sa2_code,
+        sa2_name: row.sa2_name,
+        reason: 'insufficient_data',
+        data_status: row.data_status,
+      });
+      continue;
+    }
+
     const { isLowSample, note } = lowSampleWarning(row.lowest_rent_total_bonds);
     const lowestRent = {
       value: row.lowest_rent,
@@ -334,8 +358,10 @@ function computeSuburbFinder(query) {
   // Nothing to normalise against with zero survivors — short-circuit
   // before any of the per-criterion min/max logic below.
   if (included.length === 0) {
+    // Same null guard as the budget check: a null lowest_rent must never
+    // win the `<` comparison below (null < 125 is true in JS).
     const cheapestCurrent = candidates
-      .filter((row) => row.data_status === 'CURRENT')
+      .filter((row) => row.data_status === 'CURRENT' && row.lowest_rent !== null)
       .reduce((min, row) => (min === null || row.lowest_rent < min ? row.lowest_rent : min), null);
 
     return {
@@ -455,16 +481,16 @@ router.get('/suburb-finder', (req, res) => {
 // having to remember the exact query params.
 const SUBURB_FINDER_EXAMPLES = [
   {
-    description: 'Normal case with multiple results: a $500/week budget near The Base returns 10 suburbs ranked by weighted score with equal-priority weights.',
+    description: 'Normal case with multiple results: a $500/week budget near The Base returns 39 suburbs ranked by weighted score with equal-priority weights.',
     url: '/api/suburb-finder?budget=500&destination=The%20Base',
   },
   {
-    description: 'Empty result set: a $300/week budget is below the cheapest available suburb ($340), so no suburbs qualify. The response includes a hint naming the cheapest suburb that does have current data.',
-    url: '/api/suburb-finder?budget=300&destination=The%20Base',
+    description: 'Empty result set: a $100/week budget is below the cheapest option in any suburb (Hamilton Central, $125 for a Boarding House), so no suburbs qualify. The response includes a hint naming that cheapest figure.',
+    url: '/api/suburb-finder?budget=100&destination=The%20Base',
   },
   {
-    description: 'N=1 exact-tie case: a $345/week budget leaves exactly one suburb (Greensboro), so every criterion normalises to the neutral tie value 0.5 and overall_score is 0.5.',
-    url: '/api/suburb-finder?budget=345&destination=The%20Base',
+    description: 'N=1 exact-tie case: a $130/week budget leaves exactly one suburb (Hamilton Central), so every criterion normalises to the neutral tie value 0.5 and overall_score is 0.5.',
+    url: '/api/suburb-finder?budget=130&destination=The%20Base',
   },
   {
     description: 'Different weight priorities: same $500 budget and destination as the normal case, but weighted entirely toward rent (rent_weight=1, transport_weight=0, distance_weight=0), so the ranking collapses to cheapest-first.',

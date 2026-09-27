@@ -619,6 +619,11 @@
   color: #44403c;
 }
 
+.lowest-rent-note {
+  margin: 0 0 0.4rem;
+  color: #78716c;
+}
+
 /* Teal, unlike the app title above the nav bar — this IS an interactive
    element (a real navigation link), exactly what that colour is reserved
    for in this app. */

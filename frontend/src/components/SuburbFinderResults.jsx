@@ -4,13 +4,22 @@ import { Link } from 'react-router-dom';
 // distinct MBIE category, not a duplicate of 'ALL' — see
 // backend/README.md) — 'ALL' and null both just mean "no specific bed
 // count to name", so both fall through to showing the dwelling type alone.
+// dwelling_type 'ALL' only reaches here when a suburb has no specific
+// dwelling-type row (see backend/README.md's "lowest_rent" section), and is
+// spelled out so it can't be read as one particular type.
 function formatDwellingType(dwellingType, numberOfBeds) {
-  if (!numberOfBeds || numberOfBeds === 'ALL') return dwellingType;
-  return `${dwellingType}, ${numberOfBeds} bed${numberOfBeds === '1' ? '' : 's'}`;
+  const type = dwellingType === 'ALL' ? 'all dwelling types combined' : dwellingType;
+  if (!numberOfBeds || numberOfBeds === 'ALL') return type;
+  return `${type}, ${numberOfBeds} bed${numberOfBeds === '1' ? '' : 's'}`;
 }
 
+// insufficient_data with data_status 'CURRENT' means the suburb's rent data
+// is recent but has no figure the budget can be checked against (see
+// backend/README.md) — naming the status there would read as a contradiction.
 const EXCLUSION_LABEL = {
-  insufficient_data: (item) => `insufficient data (${item.data_status})`,
+  insufficient_data: (item) => (item.data_status === 'CURRENT'
+    ? 'insufficient data (no rent figure to check against your budget)'
+    : `insufficient data (${item.data_status})`),
   exceeds_budget: (item) => `exceeds budget (cheapest found: $${item.lowest_rent.value}/week, ${formatDwellingType(item.lowest_rent.dwelling_type, item.lowest_rent.number_of_beds)})`,
 };
 
@@ -107,7 +116,8 @@ function ScoreBreakdown({ breakdown, destination }) {
 }
 
 // The budget hard-constraint is checked against this figure (the cheapest
-// specific dwelling_type/beds row for the suburb), not the median_rent
+// specific dwelling_type/beds row for the suburb, or its cheapest
+// all-dwelling-types row when it has no specific one), not the median_rent
 // shown in ScoreBreakdown — see backend/README.md's "lowest_rent" section
 // for why they're deliberately different numbers serving different jobs.
 // No minimum sample size excludes a suburb here, so total_bonds is always
@@ -125,6 +135,11 @@ function LowestRent({ lowestRent }) {
       <p className="lowest-rent-line">
         Cheapest option found: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
       </p>
+      {dwelling_type === 'ALL' && (
+        <p className="lowest-rent-note">
+          There is no rent data for specific dwelling types in this suburb, so this is the median across all dwelling types.
+        </p>
+      )}
       {low_sample_warning && <div className="banner banner-warning">{low_sample_note}</div>}
     </div>
   );
