@@ -504,8 +504,8 @@ const SUBURB_FINDER_EXAMPLES = [
 
 // Unlike rental-price-check-examples, this intentionally stays
 // description + url only (no live result field) — a suburb-finder result
-// can carry up to 10 full score-broken-down suburbs, which is too long to
-// skim during a demo.
+// carries every suburb within budget (up to all 62), each fully score-
+// broken-down, which is too long to skim during a demo.
 router.get('/suburb-finder-examples', (req, res) => {
   res.json(SUBURB_FINDER_EXAMPLES);
 });

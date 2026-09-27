@@ -663,8 +663,8 @@ here the same way):
 
 A fixed list of example Suburb Finder requests, each as `{ description, url }`.
 Unlike `/api/rental-price-check-examples` it deliberately carries no live `result`
-— one Suburb Finder response can hold up to 10 fully score-broken-down suburbs,
-which is too long to skim in a demo. No parameters.
+— one Suburb Finder response holds every suburb within budget (up to all 62), each
+fully score-broken-down, which is too long to skim in a demo. No parameters.
 
 ## Testing
 
