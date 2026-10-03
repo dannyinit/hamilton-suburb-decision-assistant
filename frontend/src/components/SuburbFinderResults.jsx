@@ -121,6 +121,8 @@ function ScoreBreakdown({ breakdown, destination }) {
 // means under 4 quarters old), not the median_rent
 // shown in ScoreBreakdown — see backend/README.md's "lowest_rent" section
 // for why they're deliberately different numbers serving different jobs.
+// Its quarter (timeframe_label, e.g. "Q4 2025") is shown too: a recent
+// figure can still be up to 3 quarters older than the latest data.
 // No minimum sample size excludes a suburb here, so total_bonds is always
 // shown (not just when small) for full transparency; low_sample_warning
 // (from the same total_bonds, at or below MBIE's own minimum publishable
@@ -129,12 +131,12 @@ function ScoreBreakdown({ breakdown, destination }) {
 // suburbs (50/60 when this was tuned, 43/62 with the Q2 2026 data), so a "be alarmed" tone
 // would just be alarm fatigue, not a useful signal.
 function LowestRent({ lowestRent }) {
-  const { value, dwelling_type, number_of_beds, total_bonds, low_sample_warning, low_sample_note } = lowestRent;
+  const { value, dwelling_type, number_of_beds, total_bonds, timeframe_label, low_sample_warning, low_sample_note } = lowestRent;
 
   return (
     <div className="lowest-rent">
       <p className="lowest-rent-line">
-        Cheapest option found: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
+        Cheapest option found: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, {timeframe_label}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
       </p>
       {dwelling_type === 'ALL' && (
         <p className="lowest-rent-note">

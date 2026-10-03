@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../db');
 const { lowSampleWarning } = require('../lowSampleWarning');
+const { quarterLabel } = require('../quarterLabel');
 
 const router = express.Router();
 
@@ -141,7 +142,7 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
 const STALE_THRESHOLD_QUARTERS = 4; // keep in sync with build_hamilton_db.py
 const CHEAPEST_SPECIFIC_ROW_CTE = `
   WITH cheapest AS (
-    SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds,
+    SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds, timeframe,
            ROW_NUMBER() OVER (
              PARTITION BY sa2_code
              ORDER BY (dwelling_type = 'ALL') ASC, median_rent ASC
@@ -165,7 +166,8 @@ const findCandidatesStmt = db.prepare(`
     c.dwelling_type AS lowest_dwelling_type,
     c.number_of_beds AS lowest_number_of_beds,
     c.median_rent AS lowest_rent,
-    c.total_bonds AS lowest_rent_total_bonds
+    c.total_bonds AS lowest_rent_total_bonds,
+    c.timeframe AS lowest_rent_timeframe
   FROM suburbs s
   JOIN suburb_data_status sds ON sds.sa2_code = s.sa2_code
   LEFT JOIN rent r ON r.sa2_code = s.sa2_code AND r.dwelling_type = 'ALL' AND r.number_of_beds = 'ALL'
@@ -190,7 +192,8 @@ const findCandidatesNoDestinationStmt = db.prepare(`
     c.dwelling_type AS lowest_dwelling_type,
     c.number_of_beds AS lowest_number_of_beds,
     c.median_rent AS lowest_rent,
-    c.total_bonds AS lowest_rent_total_bonds
+    c.total_bonds AS lowest_rent_total_bonds,
+    c.timeframe AS lowest_rent_timeframe
   FROM suburbs s
   JOIN suburb_data_status sds ON sds.sa2_code = s.sa2_code
   LEFT JOIN rent r ON r.sa2_code = s.sa2_code AND r.dwelling_type = 'ALL' AND r.number_of_beds = 'ALL'
@@ -346,6 +349,11 @@ function computeSuburbFinder(query) {
       dwelling_type: row.lowest_dwelling_type,
       number_of_beds: row.lowest_number_of_beds,
       total_bonds: row.lowest_rent_total_bonds,
+      // The quarter of the row `value` came from, formatted the same way as
+      // Rental Price Check's timeframe_label. Rows within one suburb differ
+      // in age, so this is per figure, not one date for the whole response.
+      timeframe: row.lowest_rent_timeframe,
+      timeframe_label: quarterLabel(row.lowest_rent_timeframe),
       low_sample_warning: isLowSample,
       low_sample_note: note,
     };

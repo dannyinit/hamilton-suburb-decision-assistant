@@ -393,6 +393,8 @@ Each suburb's `lowest_rent` object (present on every entry in `results`, and on
 | `value` | the rent figure compared against `budget` |
 | `dwelling_type`, `number_of_beds` | which row `value` came from — a specific dwelling type, or `"ALL"` for the fallback above |
 | `total_bonds` | that row's sample size |
+| `timeframe` | that row's quarter, as MBIE's TimeFrame date (e.g. `"2025-10-01"`) |
+| `timeframe_label` | the same quarter formatted for display (e.g. `"Q4 2025"`), using the same `quarterLabel` helper as Rental Price Check. Always one of the 4 latest quarters, since only recent rows are used. The frontend shows it in the "Cheapest option found" line |
 | `low_sample_warning` | `true` when `total_bonds <= 6` — the smallest sample MBIE ever publishes (it suppresses counts below 5 and rounds to base 3), not an arbitrary cutoff; see "Low-sample warning" under Rental Price Check. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` was only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (as of the Q2 2026 pull, with only recent rows counted: 6, 9, 12, 15 or 21, and 43/62 suburbs warned) |
 | `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false` |
 
@@ -572,6 +574,8 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "dwelling_type": "Boarding House",
         "number_of_beds": "1",
         "total_bonds": 6,
+        "timeframe": "2026-04-01",
+        "timeframe_label": "Q2 2026",
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
@@ -587,6 +591,8 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "dwelling_type": "House",
         "number_of_beds": "ALL",
         "total_bonds": 6,
+        "timeframe": "2026-01-01",
+        "timeframe_label": "Q1 2026",
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
@@ -600,6 +606,8 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "dwelling_type": "House",
         "number_of_beds": "ALL",
         "total_bonds": 6,
+        "timeframe": "2025-10-01",
+        "timeframe_label": "Q4 2025",
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
@@ -644,6 +652,8 @@ here the same way):
         "dwelling_type": "Apartment",
         "number_of_beds": "1",
         "total_bonds": 12,
+        "timeframe": "2026-01-01",
+        "timeframe_label": "Q1 2026",
         "low_sample_warning": false,
         "low_sample_note": null
       }
@@ -659,6 +669,8 @@ here the same way):
         "dwelling_type": "House",
         "number_of_beds": "ALL",
         "total_bonds": 6,
+        "timeframe": "2026-01-01",
+        "timeframe_label": "Q1 2026",
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
@@ -672,6 +684,8 @@ here the same way):
         "dwelling_type": "House",
         "number_of_beds": "ALL",
         "total_bonds": 6,
+        "timeframe": "2025-10-01",
+        "timeframe_label": "Q4 2025",
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
       }
@@ -701,11 +715,11 @@ fully score-broken-down, which is too long to skim in a demo. No parameters.
   low-sample footnote, invalid input, rent comparison; NO_DATA is described but has
   no real-data example as of the Q2 2026 pull).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 87 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 89 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
   low-coverage suburbs, transport route reach (including monotonicity and the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
-  — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
+  — structure, its quarter label, the `low_sample_warning`/`total_bonds <= 6` invariant, the
   documented 43/62 warned split, a "smoking gun" check that a suburb is
   actually included by its `lowest_rent` and not its `median_rent`, and a check
   that an old row (Hamilton Central's 6-quarter-old $125) isn't used — and the

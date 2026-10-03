@@ -218,7 +218,7 @@ if r:
 # of the exact < 4 boundary is in test_stale_budget_rent.py.
 code, body = call({"budget": 10000, "destination": "The Base"})
 hc = next((x for x in body["results"] if x["sa2_name"] == "Hamilton Central"), None)
-check("recent rows only: Hamilton Central's lowest_rent is the recent $280 row, not the old $125 one", hc is not None and hc["lowest_rent"]["value"] == 280 and hc["lowest_rent"]["number_of_beds"] == "1", hc and hc["lowest_rent"])
+check("recent rows only: Hamilton Central's lowest_rent is the recent $280 row, not the old $125 one", hc is not None and hc["lowest_rent"]["value"] == 280 and hc["lowest_rent"]["number_of_beds"] == "1" and hc["lowest_rent"]["timeframe_label"] == "Q2 2026", hc and hc["lowest_rent"])
 code, body = call({"budget": 150, "destination": "The Base"})
 hc_ex = next((e for e in body["excluded"] if e["sa2_name"] == "Hamilton Central"), None)
 check("recent rows only: Hamilton Central excluded at budget=150 as exceeds_budget", hc_ex is not None and hc_ex["reason"] == "exceeds_budget" and hc_ex["lowest_rent"]["value"] == 280, hc_ex)
@@ -228,9 +228,25 @@ code, body = call({"budget": 10000, "destination": "The Base"})
 r = body["results"]
 ex = body["excluded"]
 check("budget=10000 -> every result has a lowest_rent object with the expected keys", all(
-    set(x["lowest_rent"].keys()) == {"value", "dwelling_type", "number_of_beds", "total_bonds", "low_sample_warning", "low_sample_note"}
+    set(x["lowest_rent"].keys()) == {"value", "dwelling_type", "number_of_beds", "total_bonds", "timeframe", "timeframe_label", "low_sample_warning", "low_sample_note"}
     for x in r
 ), [set(x["lowest_rent"].keys()) for x in r[:1]])
+
+# timeframe is the quarter of the row `value` came from; timeframe_label is
+# that quarter as "Q<n> <year>", the same format as Rental Price Check. Only
+# recent rows are used, so every figure is from the latest quarter or one of
+# the 3 before it.
+def quarter_of(timeframe):
+    year, month = (int(p) for p in timeframe.split("-")[:2])
+    return year, (month - 1) // 3 + 1
+
+check("budget=10000 -> every lowest_rent.timeframe_label matches its timeframe as 'Q<n> <year>'", all(
+    x["lowest_rent"]["timeframe_label"] == "Q{1} {0}".format(*quarter_of(x["lowest_rent"]["timeframe"])) for x in r
+), [(x["sa2_name"], x["lowest_rent"]["timeframe"], x["lowest_rent"]["timeframe_label"]) for x in r[:3]])
+quarter_nums = {x["sa2_name"]: (lambda y, q: y * 4 + q)(*quarter_of(x["lowest_rent"]["timeframe"])) for x in r}
+check("budget=10000 -> every lowest_rent is from within 4 quarters of the latest one used",
+      max(quarter_nums.values()) - min(quarter_nums.values()) < 4,
+      sorted({x["lowest_rent"]["timeframe_label"] for x in r}))
 # lowest_rent.value is NOT guaranteed to be <= the ALL/ALL median_rent used
 # for scoring: the suburb-wide median also covers bonds that no published
 # recent specific row does (MBIE suppresses thin cells), e.g. Queenwood's
@@ -254,7 +270,7 @@ check("budget=10000 -> 43/62 suburbs carry low_sample_warning (the only meaningf
 # a lowest_rent object.
 code, body = call({"budget": 500, "destination": "The Base"})
 exceeds_budget = [e for e in body["excluded"] if e["reason"] == "exceeds_budget"]
-check("budget=500 -> exceeds_budget-excluded entries also carry a lowest_rent object", len(exceeds_budget) > 0 and all("lowest_rent" in e and "value" in e["lowest_rent"] for e in exceeds_budget), exceeds_budget[:1])
+check("budget=500 -> exceeds_budget-excluded entries also carry a lowest_rent object", len(exceeds_budget) > 0 and all("lowest_rent" in e and "value" in e["lowest_rent"] and "timeframe_label" in e["lowest_rent"] for e in exceeds_budget), exceeds_budget[:1])
 
 # --- 14. Rounding-based tie behavior (rent to $5, distance to 100m) ---
 # Confirmed against real data before this was written: at budget=600 with no
@@ -378,7 +394,7 @@ check("transport rounding: Swarbrick (2.842) and Rototuna South (2.835) still ti
 # through at every budget, even $150.
 code, body = call({"budget": 10000, "destination": "The Base"})
 trs = next((x for x in body["results"] if x["sa2_name"] == "Te Rapa South"), None)
-check("Te Rapa South: lowest_rent falls back to an ALL dwelling_type row ($515)", trs is not None and trs["lowest_rent"]["dwelling_type"] == "ALL" and trs["lowest_rent"]["value"] == 515, trs and trs["lowest_rent"])
+check("Te Rapa South: lowest_rent falls back to an ALL dwelling_type row ($515, Q1 2026)", trs is not None and trs["lowest_rent"]["dwelling_type"] == "ALL" and trs["lowest_rent"]["value"] == 515 and trs["lowest_rent"]["timeframe_label"] == "Q1 2026", trs and trs["lowest_rent"])
 check("every other suburb's lowest_rent is still a specific dwelling type", all(
     x["lowest_rent"]["dwelling_type"] != "ALL" for x in body["results"] if x["sa2_name"] != "Te Rapa South"
 ), [x["sa2_name"] for x in body["results"] if x["lowest_rent"]["dwelling_type"] == "ALL" and x["sa2_name"] != "Te Rapa South"])
