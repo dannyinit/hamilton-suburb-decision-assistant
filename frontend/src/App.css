@@ -454,19 +454,59 @@
 /* Suburb Finder */
 
 .suburb-ranking-legend {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.75rem;
   font-size: 0.8rem;
   color: #78716c;
+}
+
+.suburb-ranking-legend p {
+  margin: 0 0 0.4rem;
+}
+
+.suburb-ranking-legend p:last-child {
+  margin-bottom: 0;
+}
+
+.suburb-ranking-legend ul {
+  margin: 0 0 0.4rem;
+  padding-left: 1.1rem;
+}
+
+.suburb-ranking-legend li + li {
+  margin-top: 0.2rem;
 }
 
 .suburb-ranking-legend strong {
   color: #57534e;
 }
 
-/* The last legend line sits directly above the ranked list; give it the
-   larger gap the single legend paragraph used to have. */
-.suburb-ranking-legend:last-of-type {
-  margin-bottom: 0.75rem;
+.suburb-ranking-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: #78716c;
+}
+
+/* Column labels above the list: the same flex layout, gap and horizontal
+   padding (plus the 1px border) as a row's summary, so each label sits over
+   its column. Font size is set per label, not on the container, so the
+   rem-based widths and the hidden chevron's width match the rows. */
+.suburb-ranking-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0 calc(0.8rem + 1px) 0.3rem;
+}
+
+.suburb-ranking-header .suburb-ranking-rank,
+.suburb-ranking-header .suburb-ranking-name,
+.suburb-ranking-header .suburb-ranking-score {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #78716c;
+}
+
+.suburb-ranking-header .suburb-ranking-chevron {
+  visibility: hidden;
 }
 
 .suburb-ranking {
@@ -524,11 +564,30 @@
 
 /* Per-criterion breakdown, revealed by expanding a ranking row. */
 
-.score-breakdown {
-  width: 100%;
+/* An expanded suburb's details: "How it scored" and "Budget check", each
+   opened by the light divider that used to sit above the breakdown table. */
+.suburb-details-section {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
   border-top: 1px solid #e7e5e4;
+}
+
+.suburb-details-heading {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #57534e;
+}
+
+.suburb-details-subtitle {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  color: #78716c;
+}
+
+.score-breakdown {
+  width: 100%;
+  margin-top: 0.25rem;
   border-collapse: collapse;
   font-size: 0.85rem;
 }
@@ -609,26 +668,108 @@
 /* Sits directly under .score-breakdown, which already has its own
    border-top separating it from the summary row — no border here too,
    or the two separators would sit stacked right on top of each other. */
-.lowest-rent {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
+.budget-check {
+  /* A very light grey band, full width of the row (cancelling the row's
+     horizontal padding), so the budget figure reads as separate from the
+     scores without another border. */
+  margin-left: -0.8rem;
+  margin-right: -0.8rem;
+  padding: 0.75rem 0.8rem;
+  background: #fafaf9;
 }
 
-.lowest-rent-line {
-  margin: 0 0 0.4rem;
-  color: #44403c;
+.lowest-rent-figure {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #57534e;
+}
+
+.lowest-rent-figure strong {
+  margin-left: 0.25rem;
+  font-size: 1.05rem;
+  color: #1c1917;
+}
+
+.lowest-rent-meta {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  color: #78716c;
+}
+
+/* Keeps a quarter label like "Q1 2026" from splitting across lines. */
+.nowrap {
+  white-space: nowrap;
+}
+
+.lowest-rent-sample {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
 }
 
 .lowest-rent-note {
-  margin: 0 0 0.4rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
   color: #78716c;
+}
+
+/* Small-sample marker: the banner-warning amber, as a compact tag. It's a
+   button so the full explanation opens on tap as well as click. */
+.sample-tag {
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  padding: 0 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sample-tag:focus-visible {
+  outline: 2px solid #0e7490;
+  outline-offset: 1px;
+}
+
+.sample-tag-chevron {
+  display: inline-block;
+  margin-left: 0.25rem;
+  transition: transform 0.15s ease;
+}
+
+.sample-tag[aria-expanded='true'] .sample-tag-chevron {
+  transform: rotate(90deg);
+}
+
+.sample-tag-note {
+  display: block;
+  margin-top: 0.35rem;
+  color: #92400e;
+}
+
+/* display: block above would otherwise override the hidden attribute. */
+.sample-tag-note[hidden] {
+  display: none;
+}
+
+.suburb-ranking-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
 }
 
 /* Teal, unlike the app title above the nav bar — this IS an interactive
    element (a real navigation link), exactly what that colour is reserved
-   for in this app. */
+   for in this app. A secondary outline button: it's the next step from a
+   suburb, but shouldn't compete with the form's filled "Find suburbs". */
 .suburb-ranking-rpc-link {
   display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid #0e7490;
+  border-radius: 4px;
+  background: #fff;
   font-size: 0.85rem;
   font-weight: 600;
   color: #0e7490;
@@ -636,7 +777,19 @@
 }
 
 .suburb-ranking-rpc-link:hover {
-  text-decoration: underline;
+  background: #ecfeff;
+}
+
+.suburb-ranking-rpc-link:focus-visible {
+  outline: 2px solid #0e7490;
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .suburb-ranking-rpc-link {
+    flex: 1;
+    text-align: center;
+  }
 }
 
 .excluded-list {

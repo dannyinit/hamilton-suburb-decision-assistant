@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 // number_of_beds is 'ALL', a specific count ('1', '5+'), or null (a
@@ -38,19 +39,20 @@ function formatDistance(metres) {
 // (a judgment call that compresses the scale so the CBD doesn't flatten
 // everyone else, while staying strictly increasing: a higher number never
 // scores lower; see backend/README.md), so what's shown and what's scored
-// always agree on order. 400m at a normal pace is about 5 minutes, which reads
-// more naturally than a bare distance. walk_coverage (also in the response) is
+// always agree on order. The 400m is a straight-line radius, not a walking
+// route, so it's shown as "within 400 m" rather than as a walking time.
+// walk_coverage (also in the response) is
 // deliberately not shown: it's already folded into value (points with no
 // stop in range count 0), and showing it would offer users a second, unscored
-// signal for "is this suburb good on transport". The title repeats the
-// legend's explanation for hover; touch users get it from the legend.
-const TRANSPORT_EXPLANATION = "Average number of bus routes within a 5-minute walk (400 m) across the suburb; areas with no stop count as zero. More routes always score higher, each a little less than the last.";
+// signal for "is this suburb good on transport". The title adds the
+// zero-for-unserved-areas detail the shorter legend leaves out, for hover.
+const TRANSPORT_EXPLANATION = "Average number of bus routes within 400 m across the suburb; areas with no stop count as zero. More routes always score higher, each a little less than the last.";
 
 function formatTransport({ value }) {
   const rounded = value.toFixed(1);
   return (
     <span title={TRANSPORT_EXPLANATION}>
-      About {rounded === '1.0' ? '1 bus route' : `${rounded} bus routes`} within a 5-minute walk (400m)
+      About {rounded === '1.0' ? '1 bus route' : `${rounded} bus routes`} within 400 m
     </span>
   );
 }
@@ -59,7 +61,7 @@ function formatTransport({ value }) {
 // simply absent from the response when no destination was chosen (see
 // backend/README.md's optional-destination section), so filtering on
 // `breakdown[key]` below handles that for free — no separate
-// distance_excluded check needed here, unlike the banner above the list.
+// distance_excluded check needed.
 //
 // A function rather than a static array: the distance row's label names
 // the actual selected destination (e.g. "Distance to The Base"), which can
@@ -120,30 +122,97 @@ function ScoreBreakdown({ breakdown, destination }) {
 // recent all-dwelling-types row when it has no recent specific one; recent
 // means under 4 quarters old), not the median_rent
 // shown in ScoreBreakdown — see backend/README.md's "lowest_rent" section
-// for why they're deliberately different numbers serving different jobs.
-// Its quarter (timeframe_label, e.g. "Q4 2025") is shown too: a recent
-// figure can still be up to 3 quarters older than the latest data.
-// No minimum sample size excludes a suburb here, so total_bonds is always
-// shown (not just when small) for full transparency; low_sample_warning
-// (from the same total_bonds, at or below MBIE's own minimum publishable
-// sample size) additionally gets a banner when true. Amber, not the more
-// severe red: with this single threshold the warning fires for most
-// suburbs (50/60 when this was tuned, 43/62 with the Q2 2026 data), so a "be alarmed" tone
-// would just be alarm fatigue, not a useful signal.
-function LowestRent({ lowestRent }) {
+// for why they're deliberately different numbers serving different jobs,
+// which is why it gets its own "Budget check" section, subtitled to say so.
+// The figure leads; its source row (dwelling type, quarter, bonds) follows
+// as a muted line. The quarter is shown because a recent figure can still be
+// up to 3 quarters older than the latest data.
+//
+// No minimum sample size excludes a suburb here, so the bond count is always
+// shown. When low_sample_warning is true (at or below MBIE's own minimum
+// publishable sample size), the count moves into a small amber "Small
+// sample" tag on its own line instead (inline, a wrapped tag left a dangling
+// separator at phone width). The warning fires for most suburbs (50/60 when this was
+// tuned, 43/62 with the Q2 2026 data), so a full-width banner was the
+// loudest thing in every suburb's details — alarm fatigue, not a useful
+// signal. The tag is a button that shows low_sample_note on tap or click:
+// a hover-only tooltip wouldn't work on phones.
+function SmallSampleTag({ totalBonds, note }) {
+  const [open, setOpen] = useState(false);
+  const noteId = useId();
+  return (
+    <>
+      <button
+        type="button"
+        className="sample-tag"
+        aria-expanded={open}
+        aria-controls={noteId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        Small sample ({totalBonds} bond{totalBonds === 1 ? '' : 's'})
+        <span className="sample-tag-chevron" aria-hidden="true">▸</span>
+      </button>
+      <span id={noteId} className="sample-tag-note" hidden={!open}>{note}</span>
+    </>
+  );
+}
+
+function capitalise(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function BudgetCheck({ lowestRent }) {
   const { value, dwelling_type, number_of_beds, total_bonds, timeframe_label, low_sample_warning, low_sample_note } = lowestRent;
 
   return (
-    <div className="lowest-rent">
-      <p className="lowest-rent-line">
-        Cheapest option found: <strong>${value}/week</strong> ({formatDwellingType(dwelling_type, number_of_beds)}, {timeframe_label}, based on {total_bonds} bond{total_bonds === 1 ? '' : 's'})
+    <section className="suburb-details-section budget-check">
+      <h3 className="suburb-details-heading">Budget check</h3>
+      <p className="suburb-details-subtitle">Used only to check your budget, not to rank.</p>
+      <p className="lowest-rent-figure">
+        Cheapest option <strong>${value}/week</strong>
       </p>
+      <p className="lowest-rent-meta">
+        {capitalise(formatDwellingType(dwelling_type, number_of_beds))} · <span className="nowrap">{timeframe_label}</span>
+        {!low_sample_warning && ` · based on ${total_bonds} bond${total_bonds === 1 ? '' : 's'}`}
+      </p>
+      {low_sample_warning && (
+        <p className="lowest-rent-sample">
+          <SmallSampleTag totalBonds={total_bonds} note={low_sample_note} />
+        </p>
+      )}
       {dwelling_type === 'ALL' && (
         <p className="lowest-rent-note">
           There is no recent rent data for specific dwelling types in this suburb, so this is the median across all dwelling types.
         </p>
       )}
-      {low_sample_warning && <div className="banner banner-warning">{low_sample_note}</div>}
+    </section>
+  );
+}
+
+// Shown once above the list, not per suburb: it's the same for every row.
+// Plain caption text, not .banner-info: that style is for something notable
+// about *this* search; this explains how to read the list. The Distance
+// bullet is also how a missing destination is explained (the response's
+// distance_excluded_note is deliberately not shown: it's written for API
+// consumers and names query parameters).
+function RankingLegend() {
+  return (
+    <div className="suburb-ranking-legend">
+      <p>Suburbs are scored and ranked on the following criteria:</p>
+      <ul>
+        <li>
+          <strong>Rent:</strong> the suburb's median weekly rent across all dwelling types. Lower rent scores higher.
+        </li>
+        <li>
+          <strong>Transport:</strong> the average number of bus routes within 400 m across the suburb. More routes score higher, though each extra route adds a little less.
+        </li>
+        <li>
+          <strong>Distance:</strong> straight-line distance from the suburb's centre to your chosen destination. Shorter scores higher. Only used once you pick a destination.
+        </li>
+      </ul>
+      <p>
+        Each criterion is scored from 0 to 1 compared with the other suburbs in this list, and the overall score combines them using your priorities.
+      </p>
     </div>
   );
 }
@@ -200,27 +269,18 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
 
   return (
     <div className={`status-card ok result-card${isRefreshing ? ' is-refreshing' : ''}`}>
-      {data.distance_excluded && (
-        <div className="banner banner-info">{data.distance_excluded_note}</div>
-      )}
+      <RankingLegend />
 
-      {/* Shown once, not per suburb — the distinction is identical for
-          every row, so repeating it 60 times would just be noise, and a
-          reader only needs it explained the first time. Plain caption
-          text, not .banner-info: that style is for something notable
-          about *this* search (like distance_excluded); this is a fixed
-          fact about how to read the list, always true regardless of
-          search. */}
-      <p className="suburb-ranking-legend">
-        <strong>Rent:</strong> Median Rent is used to rank suburbs. Cheapest option found is the cheapest dwelling type there with data from within a year of the latest quarter, used only to check your budget, not to rank.
-      </p>
-      <p className="suburb-ranking-legend">
-        <strong>Transport:</strong> the average number of bus routes within a 5-minute walk (400 m) across the suburb, where areas with no stop count as zero. More routes always score higher, though each extra route adds a little less.
-      </p>
-      <p className="suburb-ranking-legend">
-        <strong>Distance:</strong> straight-line distance from the suburb's centre to your chosen destination; shorter scores higher. Only shown and scored once you pick a destination.
-      </p>
-
+      <p className="suburb-ranking-hint">Select a suburb to see how it scored on each criterion.</p>
+      {/* Column labels for the rows below. Reuses the rows' own column
+          classes so the widths match; the hidden chevron keeps "Overall
+          score" right-aligned with the score rather than the chevron. */}
+      <div className="suburb-ranking-header">
+        <span className="suburb-ranking-rank">Rank</span>
+        <span className="suburb-ranking-name">Suburb</span>
+        <span className="suburb-ranking-score">Overall score</span>
+        <span className="suburb-ranking-chevron" aria-hidden="true">▸</span>
+      </div>
       <ol className="suburb-ranking">
         {data.results.map((result) => (
           <li key={result.sa2_code}>
@@ -231,14 +291,19 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
                 <span className="suburb-ranking-score">{result.overall_score.toFixed(3)}</span>
                 <span className="suburb-ranking-chevron" aria-hidden="true">▸</span>
               </summary>
-              <ScoreBreakdown breakdown={result.score_breakdown} destination={data.destination} />
-              <LowestRent lowestRent={result.lowest_rent} />
-              <Link
-                to={`/rental-price-check?${new URLSearchParams({ sa2_code: result.sa2_code, dwelling_type: result.lowest_rent.dwelling_type }).toString()}`}
-                className="suburb-ranking-rpc-link"
-              >
-                Check detailed rent in Rental Price Check →
-              </Link>
+              <section className="suburb-details-section">
+                <h3 className="suburb-details-heading">How it scored</h3>
+                <ScoreBreakdown breakdown={result.score_breakdown} destination={data.destination} />
+              </section>
+              <BudgetCheck lowestRent={result.lowest_rent} />
+              <div className="suburb-ranking-actions">
+                <Link
+                  to={`/rental-price-check?${new URLSearchParams({ sa2_code: result.sa2_code, dwelling_type: result.lowest_rent.dwelling_type }).toString()}`}
+                  className="suburb-ranking-rpc-link"
+                >
+                  Check detailed rent in Rental Price Check →
+                </Link>
+              </div>
             </details>
           </li>
         ))}

@@ -394,17 +394,18 @@ Each suburb's `lowest_rent` object (present on every entry in `results`, and on
 | `dwelling_type`, `number_of_beds` | which row `value` came from — a specific dwelling type, or `"ALL"` for the fallback above |
 | `total_bonds` | that row's sample size |
 | `timeframe` | that row's quarter, as MBIE's TimeFrame date (e.g. `"2025-10-01"`) |
-| `timeframe_label` | the same quarter formatted for display (e.g. `"Q4 2025"`), using the same `quarterLabel` helper as Rental Price Check. Always one of the 4 latest quarters, since only recent rows are used. The frontend shows it in the "Cheapest option found" line |
+| `timeframe_label` | the same quarter formatted for display (e.g. `"Q4 2025"`), using the same `quarterLabel` helper as Rental Price Check. Always one of the 4 latest quarters, since only recent rows are used. The frontend shows it under the "Cheapest option" figure in a suburb's "Budget check" section |
 | `low_sample_warning` | `true` when `total_bonds <= 6` — the smallest sample MBIE ever publishes (it suppresses counts below 5 and rounds to base 3), not an arbitrary cutoff; see "Low-sample warning" under Rental Price Check. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` was only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (as of the Q2 2026 pull, with only recent rows counted: 6, 9, 12, 15 or 21, and 43/62 suburbs warned) |
-| `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false` |
+| `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false`. The frontend shows a small "Small sample (N bonds)" tag instead of the bond count, and the note when the tag is tapped or clicked |
 
 **This is deliberately a different figure from the `rent` criterion used for
 scoring** (`score_breakdown.rent`, always the suburb-wide `median_rent`) — the
 budget check needs the most optimistic realistic figure to avoid excluding a
 suburb that might work, while ranking needs a stable, suburb-wide figure so one
-thin sample doesn't distort a suburb's score relative to others. See the
-frontend's `suburb-ranking-legend` copy for how this distinction is explained
-to users, who see both figures next to each other.
+thin sample doesn't distort a suburb's score relative to others. Users see
+both figures in a suburb's details: the median under "How it scored", and
+`lowest_rent` as the "Cheapest option" in a separate "Budget check" section,
+subtitled "Used only to check your budget, not to rank."
 
 **Optional destination:** when `destination` is omitted, the distance
 criterion is excluded from scoring entirely — not assigned a neutral score,
@@ -413,7 +414,8 @@ proportionally to fill the full weight between just the two of them (the same
 sum-then-divide mechanism as always, just with fewer terms in the sum). The
 response reflects this explicitly rather than silently: `destination: null`,
 a top-level `distance_excluded: true` with a `distance_excluded_note`
-explaining why, `weights_used` with only `rent`/`transport` keys, and each
+explaining why (for API consumers: the frontend doesn't show it, since its
+legend already says distance is only used once a destination is picked), `weights_used` with only `rent`/`transport` keys, and each
 suburb's `score_breakdown` with only `rent`/`transport` keys (not a `distance`
 key with a null value). If both `rent_weight` and `transport_weight` are `0`
 with no destination, the `400` error message names only those two params, not
