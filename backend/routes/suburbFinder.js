@@ -24,12 +24,16 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // This guards a different scenario from ROUNDING_STEP below: it stops a
 // genuinely tight population (e.g. a heavily budget-narrowed `included`
 // set) from being stretched to fill [0,1] as if its small spread were the
-// full story. Confirmed against the Q2 2026 data across every $5-step
-// budget from $100 to $1,200 that leaves >= 2 suburbs (216 of them), for
-// all four destinations: the rent floor engages only at $125–$135, where
-// just 2 suburbs survive; the distance floor never engages; and the
-// survivors' transport scoring input never spans less than ~1.9. It's a
-// rare-edge-case safety net, not the mechanism doing routine work.
+// full story. Checked against the Q2 2026 data across every $5-step
+// budget from $100 to $1,200, for each destination and for none (201
+// budgets, $200 upwards, leave >= 2 suburbs): only the transport floor
+// ever engages, at $200–$255, where just Kahikatea and Pukete East survive
+// (a 0.12 span, so Pukete East scores 0.4 rather than 1 on transport),
+// joined by Melville North from $235 (0.22). From $260 the narrowest
+// transport span is 0.76. The rent floor never engages (narrowest span
+// $60, at $200), nor does the distance floor (narrowest span 1,900 m, to
+// the University at $200). It's a low-budget safety net, not the
+// mechanism doing routine work.
 const RENT_THRESHOLD = 50;
 const TRANSPORT_THRESHOLD = 0.3;
 const DISTANCE_THRESHOLDS = {
@@ -108,19 +112,33 @@ function normaliseCriterion(included, { getValue, threshold, reverse }) {
 // respectively) so plain JOINs are safe; rent is LEFT JOINed since
 // NO_DATA suburbs genuinely have no ALL/ALL row.
 //
-// `cheapest` finds, per suburb, the single specific (dwelling_type !=
-// 'ALL') row with the lowest median_rent — this is what the budget hard
+// `cheapest` finds, per suburb, the single recent specific (dwelling_type
+// != 'ALL') row with the lowest median_rent — this is what the budget hard
 // constraint actually compares against, so a suburb where e.g. Rooms are
 // genuinely affordable isn't excluded just because its House-dominated
 // overall median looks expensive. No minimum sample size is required
 // (see lowSampleWarning in ../lowSampleWarning.js for why).
 //
-// A suburb with no specific row at all (Te Rapa South in the Q2 2026 pull:
-// only ALL/ALL and ALL/2-beds rows) falls back to its cheapest
+// Only recent rows are candidates: quarters_stale < STALE_THRESHOLD_QUARTERS,
+// the same age rule (and the same column) that marks a suburb STALE in
+// data-pipeline/scripts/build_hamilton_db.py, applied here per row. Each
+// rent row is its combination's latest quarter, and many specific rows are
+// years old (MBIE omits thin quarters), so without this a suburb could pass
+// the budget on e.g. a 2020 Room figure while its current rents are far
+// higher.
+//
+// A suburb with no recent specific row (Te Rapa South in the Q2 2026 pull:
+// only ALL/ALL and ALL/2-beds rows) falls back to its cheapest recent
 // dwelling_type = 'ALL' row instead — specific rows always sort first, so
-// the fallback only applies when there are none. A suburb with no row
-// with a median at all still comes back null here; the budget check below
-// excludes it rather than comparing null against the budget.
+// the fallback only applies when there are none. A CURRENT suburb's ALL/ALL
+// row is recent by definition, so the fallback finds a figure whenever that
+// row has a median. A suburb with no recent row with a median at all still
+// comes back null here; the budget check below excludes it rather than
+// comparing null against the budget.
+//
+// The constant is interpolated rather than bound: both statements below
+// share this CTE and bind the destination positionally.
+const STALE_THRESHOLD_QUARTERS = 4; // keep in sync with build_hamilton_db.py
 const CHEAPEST_SPECIFIC_ROW_CTE = `
   WITH cheapest AS (
     SELECT sa2_code, dwelling_type, number_of_beds, median_rent, total_bonds,
@@ -130,6 +148,7 @@ const CHEAPEST_SPECIFIC_ROW_CTE = `
            ) AS rn
     FROM rent
     WHERE median_rent IS NOT NULL
+      AND quarters_stale < ${STALE_THRESHOLD_QUARTERS}
   )
 `;
 
@@ -286,9 +305,9 @@ function computeSuburbFinder(query) {
   // suburb never carries both an insufficient_data and an exceeds_budget
   // reason at once (per data-pipeline/README.md's documented ordering).
   // Unaffected by destination — neither check reads distance_m. The budget
-  // check compares against `lowest_rent` (the cheapest specific dwelling
-  // type/beds row for that suburb), not the ALL/ALL median — see the
-  // `cheapest` CTE above for why.
+  // check compares against `lowest_rent` (the cheapest recent specific
+  // dwelling type/beds row for that suburb), not the ALL/ALL median — see
+  // the `cheapest` CTE above for why.
   const excluded = [];
   const included = [];
 
@@ -303,8 +322,10 @@ function computeSuburbFinder(query) {
       continue;
     }
 
-    // No rent figure to check the budget against, even after the ALL
-    // fallback in `cheapest`: exclude, never pass through. A bare
+    // No recent rent figure to check the budget against, even after the
+    // ALL fallback in `cheapest`: exclude, never pass through. With the
+    // real data this can't happen (every CURRENT suburb's ALL/ALL row is
+    // recent and has a median), so it's a safety net. A bare
     // `null > budget` is false in JS, which would silently let the suburb
     // through at any budget. Reported as insufficient_data, with
     // data_status still 'CURRENT', which is how the frontend tells this
@@ -359,7 +380,7 @@ function computeSuburbFinder(query) {
   // before any of the per-criterion min/max logic below.
   if (included.length === 0) {
     // Same null guard as the budget check: a null lowest_rent must never
-    // win the `<` comparison below (null < 125 is true in JS).
+    // win the `<` comparison below (null < 192 is true in JS).
     const cheapestCurrent = candidates
       .filter((row) => row.data_status === 'CURRENT' && row.lowest_rent !== null)
       .reduce((min, row) => (min === null || row.lowest_rent < min ? row.lowest_rent : min), null);
@@ -481,16 +502,16 @@ router.get('/suburb-finder', (req, res) => {
 // having to remember the exact query params.
 const SUBURB_FINDER_EXAMPLES = [
   {
-    description: 'Normal case with multiple results: a $500/week budget near The Base returns 39 suburbs ranked by weighted score with equal-priority weights.',
+    description: 'Normal case with multiple results: a $500/week budget near The Base returns 23 suburbs ranked by weighted score with equal-priority weights.',
     url: '/api/suburb-finder?budget=500&destination=The%20Base',
   },
   {
-    description: 'Empty result set: a $100/week budget is below the cheapest option in any suburb (Hamilton Central, $125 for a Boarding House), so no suburbs qualify. The response includes a hint naming that cheapest figure.',
+    description: 'Empty result set: a $100/week budget is below the cheapest recent option in any suburb (Pukete East, $192 for a 2-bedroom Apartment), so no suburbs qualify. The response includes a hint naming that cheapest figure.',
     url: '/api/suburb-finder?budget=100&destination=The%20Base',
   },
   {
-    description: 'N=1 exact-tie case: a $130/week budget leaves exactly one suburb (Hamilton Central), so every criterion normalises to the neutral tie value 0.5 and overall_score is 0.5.',
-    url: '/api/suburb-finder?budget=130&destination=The%20Base',
+    description: 'N=1 exact-tie case: a $195/week budget leaves exactly one suburb (Pukete East), so every criterion normalises to the neutral tie value 0.5 and overall_score is 0.5.',
+    url: '/api/suburb-finder?budget=195&destination=The%20Base',
   },
   {
     description: 'Different weight priorities: same $500 budget and destination as the normal case, but weighted entirely toward rent (rent_weight=1, transport_weight=0, distance_weight=0), so the ranking collapses to cheapest-first.',

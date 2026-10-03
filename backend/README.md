@@ -342,7 +342,7 @@ chosen destination, after applying hard budget/data-quality constraints.
 
 **Hard constraints**, applied in this order so no suburb ever carries both reasons:
 1. `suburb_data_status.data_status != 'CURRENT'` → excluded, reason `insufficient_data`
-2. no `lowest_rent` figure at all, even after the fallback in "Budget filtering" below →
+2. no recent `lowest_rent` figure at all, even after the fallback in "Budget filtering" below →
    excluded, reason `insufficient_data` with `data_status: "CURRENT"` (which is how the
    frontend tells it apart from case 1). The budget is never compared against a missing
    figure: `null > budget` is `false` in JS, which would let the suburb through at any
@@ -360,17 +360,30 @@ whether `destination` was provided — neither hard constraint reads distance.
 median would wrongly exclude a suburb where a specific dwelling type (e.g. Room)
 is genuinely affordable but House prices pull the suburb-wide median above
 budget. Instead, the budget check uses `lowest_rent`: for each suburb, the
-single specific (`dwelling_type != 'ALL'`) dwelling_type/beds row with the
+single recent specific (`dwelling_type != 'ALL'`) dwelling_type/beds row with the
 lowest `median_rent` — no minimum sample size required, since hard-constraint
 filtering should err towards inclusion rather than excluding a suburb because
 its cheapest option happens to have a small sample.
 
-A suburb with no specific row at all falls back to its cheapest
+**Only recent rows count:** a row is a candidate only when `quarters_stale < 4`,
+the same age rule (on the same column) that marks a whole suburb `STALE` in the
+data pipeline, applied here row by row (`STALE_THRESHOLD_QUARTERS` in
+`routes/suburbFinder.js`). Each rent row is its combination's latest quarter, and
+many specific rows are years old because MBIE omits thin quarters — in the Q2 2026
+data, 364 of the 543 specific rows with a median are 4+ quarters old. Without the
+rule, a suburb could pass the budget on an old figure: Hamilton Central's $125
+Boarding House row is from Q4 2024 (its recent cheapest is $280), and Hamilton East
+Cook's $140 Room row is from 2020 (recent cheapest $440). Applying it cut the
+suburbs within a $500 budget from 39 to 23 and changed 36 suburbs' figures.
+
+A suburb with no recent specific row falls back to its cheapest recent
 `dwelling_type = 'ALL'` row (specific rows always win when any exist). In the
 Q2 2026 data that's only Te Rapa South, whose rows are ALL/ALL and ALL/2-beds (both
 $515), so its `lowest_rent` has `dwelling_type: "ALL"` and the frontend labels it
 "all dwelling types combined". Before this fallback existed, its missing figure let
-it through at every budget.
+it through at every budget. A `CURRENT` suburb's ALL/ALL row is recent by
+definition, so the fallback always finds a figure when that row has a median (true
+of all 62 suburbs in the Q2 2026 data).
 
 Each suburb's `lowest_rent` object (present on every entry in `results`, and on
 `excluded` entries with `reason: "exceeds_budget"`):
@@ -380,7 +393,7 @@ Each suburb's `lowest_rent` object (present on every entry in `results`, and on
 | `value` | the rent figure compared against `budget` |
 | `dwelling_type`, `number_of_beds` | which row `value` came from — a specific dwelling type, or `"ALL"` for the fallback above |
 | `total_bonds` | that row's sample size |
-| `low_sample_warning` | `true` when `total_bonds <= 6` — the smallest sample MBIE ever publishes (it suppresses counts below 5 and rounds to base 3), not an arbitrary cutoff; see "Low-sample warning" under Rental Price Check. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` was only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (as of the Q2 2026 pull: only 6, 9 or 12, and 51/62 suburbs warned) |
+| `low_sample_warning` | `true` when `total_bonds <= 6` — the smallest sample MBIE ever publishes (it suppresses counts below 5 and rounds to base 3), not an arbitrary cutoff; see "Low-sample warning" under Rental Price Check. A two-tier mild/strong design was tried first, but across all 60 `CURRENT` suburbs `lowest_rent`'s `total_bonds` was only ever 6, 9, 12, or 15 — any boundary above 15 flagged 100% of suburbs, and `<=6` is the only split the real data supports (as of the Q2 2026 pull, with only recent rows counted: 6, 9, 12, 15 or 21, and 43/62 suburbs warned) |
 | `low_sample_note` | human-readable explanation, `null` when `low_sample_warning` is `false` |
 
 **This is deliberately a different figure from the `rent` criterion used for
@@ -493,12 +506,19 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   hardcoded from the current data, so they need re-deriving if the database is rebuilt
   with materially different data.)
 
-  Confirmed against the Q2 2026 data across all 216 $5-step budgets from $100 to
-  $1,200 that leave at least 2 suburbs, for all four destinations: the rent floor
-  engages only at $125–$135, where just 2 suburbs survive; the distance floor never
-  engages; and the surviving suburbs' rounded transport scoring input never spans
-  less than 1.94 (at $125, 2 survivors). It's a rare-edge-case safety net, not a
-  mechanism doing routine work.
+  Checked against the Q2 2026 data across every $5-step budget from $100 to $1,200,
+  for each destination and with none (201 of those budgets, $200 upwards, leave at
+  least 2 suburbs). Only the **transport** floor ever engages, at $200–$255: from $200
+  to $230 only Kahikatea and Pukete East survive, and their rounded √ values span
+  0.12, so Pukete East scores 0.4 on transport rather than 1; Melville North joins
+  from $235 (span 0.22). From $260 (6 suburbs) the narrowest transport span is 0.76.
+  The **rent** floor never engages (the narrowest span of rounded medians is $60, at
+  $200), and neither does the **distance** floor (the narrowest span is 1,900m, to the
+  University of Waikato at $200, against its 1,000m floor). So the floors are a
+  low-budget safety net, not a mechanism doing routine work. (An earlier version of
+  this note, from older data, said the rent floor engaged at $125–$135; on the Q2
+  2026 data before the recent-rows rule, only the Waikato Hospital distance floor
+  engaged, at $140–$150.)
 
 - **Rent, distance and transport are also rounded before scoring** — to the nearest
   $5 for rent, nearest 100m for distance, nearest 0.02 of √(average routes) for transport — so two suburbs closer together than the data's
@@ -528,8 +548,8 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   (Weighted Sum Model). Results are ranked by `overall_score` descending, ties
   broken by `sa2_code` for deterministic ordering.
 
-**Example response** (truncated to one result; at this budget, 39 suburbs are
-included and 23 excluded):
+**Example response** (truncated to one result and two exclusions; at this budget,
+23 suburbs are included and 39 excluded):
 
 ```json
 {
@@ -541,16 +561,16 @@ included and 23 excluded):
       "rank": 1,
       "sa2_code": 179400,
       "sa2_name": "Hamilton Central",
-      "overall_score": 0.7011,
+      "overall_score": 0.6823,
       "score_breakdown": {
-        "rent": { "value": 495, "normalised_score": 0.6375 },
+        "rent": { "value": 495, "normalised_score": 0.6133 },
         "transport": { "value": 9.4935, "walk_coverage": 0.9784, "normalised_score": 1 },
-        "distance": { "value": 5982.44, "normalised_score": 0.4659 }
+        "distance": { "value": 5982.44, "normalised_score": 0.4337 }
       },
       "lowest_rent": {
-        "value": 125,
+        "value": 280,
         "dwelling_type": "Boarding House",
-        "number_of_beds": null,
+        "number_of_beds": "1",
         "total_bonds": 6,
         "low_sample_warning": true,
         "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
@@ -589,15 +609,16 @@ included and 23 excluded):
 ```
 
 Note `score_breakdown.rent.value` (495, the suburb-wide median, used for
-ranking) and `lowest_rent.value` (125, a specific Boarding House row, used for
-the budget check) are deliberately different figures — see "Budget filtering"
+ranking) and `lowest_rent.value` (280, a specific 1-bed Boarding House row, used
+for the budget check) are deliberately different figures — see "Budget filtering"
 above.
 
 **Example response, no destination** (same budget, `destination` omitted — note
 the re-normalised `weights_used`, the two-key `score_breakdown`, and that
 `lowest_rent` is unaffected by destination since it's a hard-constraint concern,
-not a scoring one; `overall_score` (and the order further down the list) differs from
-the example above because distance no longer factors in. `excluded` is the same 23 entries as the
+not a scoring one; `overall_score` and the order differ from the example above
+because distance no longer factors in — Greensboro, cheaper but less central than
+Hamilton Central, moves to the top. `excluded` is the same 39 entries as the
 example above — hard constraints don't depend on destination — just truncated
 here the same way):
 
@@ -611,20 +632,20 @@ here the same way):
   "results": [
     {
       "rank": 1,
-      "sa2_code": 179400,
-      "sa2_name": "Hamilton Central",
-      "overall_score": 0.8188,
+      "sa2_code": 179900,
+      "sa2_name": "Greensboro",
+      "overall_score": 0.811,
       "score_breakdown": {
-        "rent": { "value": 495, "normalised_score": 0.6375 },
-        "transport": { "value": 9.4935, "walk_coverage": 0.9784, "normalised_score": 1 }
+        "rent": { "value": 350, "normalised_score": 1 },
+        "transport": { "value": 4.4599, "walk_coverage": 1, "normalised_score": 0.622 }
       },
       "lowest_rent": {
-        "value": 125,
-        "dwelling_type": "Boarding House",
-        "number_of_beds": null,
-        "total_bonds": 6,
-        "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "value": 263,
+        "dwelling_type": "Apartment",
+        "number_of_beds": "1",
+        "total_bonds": 12,
+        "low_sample_warning": false,
+        "low_sample_note": null
       }
     }
   ],
@@ -680,13 +701,14 @@ fully score-broken-down, which is too long to skim in a demo. No parameters.
   low-sample footnote, invalid input, rent comparison; NO_DATA is described but has
   no real-data example as of the Q2 2026 pull).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 84 checks run
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 87 checks run
   against a live server (validation, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
   low-coverage suburbs, transport route reach (including monotonicity and the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
   — structure, the `low_sample_warning`/`total_bonds <= 6` invariant, the
-  documented 51/62 warned split, and a "smoking gun" check that a suburb is
-  actually included by its `lowest_rent` and not its `median_rent` — and the
+  documented 43/62 warned split, a "smoking gun" check that a suburb is
+  actually included by its `lowest_rent` and not its `median_rent`, and a check
+  that an old row (Hamilton Central's 6-quarter-old $125) isn't used — and the
   rent/distance/transport rounding-based tie behavior, with real suburbs confirmed to
   tie within a rounding bucket and not tie across one — and the fallback to an
   all-dwelling-types `lowest_rent` for Te Rapa South). Start the server
@@ -709,4 +731,15 @@ fully score-broken-down, which is too long to skim in a demo. No parameters.
 
   ```
   python3 backend/tests/test_null_budget_rent.py
+  ```
+- **Suburb Finder recent-rows rule:**
+  [tests/test_stale_budget_rent.py](tests/test_stale_budget_rent.py) — 8 checks that
+  `lowest_rent` only comes from rows with `quarters_stale < 4`: in a copy of
+  `hamilton.db`, a 4-quarter-old $50 row is ignored while a 3-quarter-old $55 row is
+  used (the exact boundary), and a suburb whose specific rows are all 4 quarters old
+  falls back to its cheapest recent all-dwelling-types row instead of being excluded.
+  Like the null-guard test, it starts its own server:
+
+  ```
+  python3 backend/tests/test_stale_budget_rent.py
   ```

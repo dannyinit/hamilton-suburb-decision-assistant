@@ -110,8 +110,8 @@ def main():
         # And at a budget nothing fits, it can't win the cheapest-suburb hint.
         body = call({"budget": 100, "destination": "The Base"})
         check("null budget figure: budget=100 still returns no results", body["results"] == [] and body.get("no_suburbs_in_budget") is True, body.get("results"))
-        check("null budget figure: cheapest-suburb hint still names $125, never null",
-              "$125/week" in body.get("message", "") and "null" not in body.get("message", ""), body.get("message"))
+        check("null budget figure: cheapest-suburb hint still names $192, never null",
+              "$192/week" in body.get("message", "") and "null" not in body.get("message", ""), body.get("message"))
     finally:
         if proc is not None:
             proc.terminate()

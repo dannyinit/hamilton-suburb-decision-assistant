@@ -233,7 +233,9 @@ rules that motivated the design are still accurate and kept here for context:
 
 - **Feature 1 — Suburb Finder (ranking):** exclude a suburb when `suburb_data_status.data_status != 'CURRENT'`,
   with reason `insufficient_data`, checked *before* the budget filter so a suburb never carries
-  both an `insufficient_data` and an `exceeds_budget` reason at once.
+  both an `insufficient_data` and an `exceeds_budget` reason at once. The budget filter applies the same
+  4-quarter rule row by row: its rent figure comes only from rows with `quarters_stale < 4`, so a
+  suburb can't pass the budget on an old figure for one dwelling type.
 - **Feature 2 — Rental Price Check (lookup):** never blocks a suburb from selection. If `rent` has
   zero rows for the suburb at all, return "no data available" (this falls out naturally from the
   data — no special-casing needed; no suburb is in this state as of the Q2 2026 pull). Otherwise show the row for the requested

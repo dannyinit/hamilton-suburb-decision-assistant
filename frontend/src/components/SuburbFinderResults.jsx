@@ -4,8 +4,8 @@ import { Link } from 'react-router-dom';
 // distinct MBIE category, not a duplicate of 'ALL' — see
 // backend/README.md) — 'ALL' and null both just mean "no specific bed
 // count to name", so both fall through to showing the dwelling type alone.
-// dwelling_type 'ALL' only reaches here when a suburb has no specific
-// dwelling-type row (see backend/README.md's "lowest_rent" section), and is
+// dwelling_type 'ALL' only reaches here when a suburb has no recent specific
+// dwelling-type row (see backend/README.md's "Budget filtering" section), and is
 // spelled out so it can't be read as one particular type.
 function formatDwellingType(dwellingType, numberOfBeds) {
   const type = dwellingType === 'ALL' ? 'all dwelling types combined' : dwellingType;
@@ -18,7 +18,7 @@ function formatDwellingType(dwellingType, numberOfBeds) {
 // backend/README.md) — naming the status there would read as a contradiction.
 const EXCLUSION_LABEL = {
   insufficient_data: (item) => (item.data_status === 'CURRENT'
-    ? 'insufficient data (no rent figure to check against your budget)'
+    ? 'insufficient data (no recent rent figure to check against your budget)'
     : `insufficient data (${item.data_status})`),
   exceeds_budget: (item) => `exceeds budget (cheapest found: $${item.lowest_rent.value}/week, ${formatDwellingType(item.lowest_rent.dwelling_type, item.lowest_rent.number_of_beds)})`,
 };
@@ -116,8 +116,9 @@ function ScoreBreakdown({ breakdown, destination }) {
 }
 
 // The budget hard-constraint is checked against this figure (the cheapest
-// specific dwelling_type/beds row for the suburb, or its cheapest
-// all-dwelling-types row when it has no specific one), not the median_rent
+// recent specific dwelling_type/beds row for the suburb, or its cheapest
+// recent all-dwelling-types row when it has no recent specific one; recent
+// means under 4 quarters old), not the median_rent
 // shown in ScoreBreakdown — see backend/README.md's "lowest_rent" section
 // for why they're deliberately different numbers serving different jobs.
 // No minimum sample size excludes a suburb here, so total_bonds is always
@@ -125,7 +126,7 @@ function ScoreBreakdown({ breakdown, destination }) {
 // (from the same total_bonds, at or below MBIE's own minimum publishable
 // sample size) additionally gets a banner when true. Amber, not the more
 // severe red: with this single threshold the warning fires for most
-// suburbs (50/60 at the time this was tuned), so a "be alarmed" tone
+// suburbs (50/60 when this was tuned, 43/62 with the Q2 2026 data), so a "be alarmed" tone
 // would just be alarm fatigue, not a useful signal.
 function LowestRent({ lowestRent }) {
   const { value, dwelling_type, number_of_beds, total_bonds, low_sample_warning, low_sample_note } = lowestRent;
@@ -137,7 +138,7 @@ function LowestRent({ lowestRent }) {
       </p>
       {dwelling_type === 'ALL' && (
         <p className="lowest-rent-note">
-          There is no rent data for specific dwelling types in this suburb, so this is the median across all dwelling types.
+          There is no recent rent data for specific dwelling types in this suburb, so this is the median across all dwelling types.
         </p>
       )}
       {low_sample_warning && <div className="banner banner-warning">{low_sample_note}</div>}
@@ -209,7 +210,7 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
           fact about how to read the list, always true regardless of
           search. */}
       <p className="suburb-ranking-legend">
-        <strong>Rent:</strong> Median Rent is used to rank suburbs. Cheapest option found is the cheapest dwelling type there, used only to check your budget, not to rank.
+        <strong>Rent:</strong> Median Rent is used to rank suburbs. Cheapest option found is the cheapest dwelling type there with data from within a year of the latest quarter, used only to check your budget, not to rank.
       </p>
       <p className="suburb-ranking-legend">
         <strong>Transport:</strong> the average number of bus routes within a 5-minute walk (400 m) across the suburb, where areas with no stop count as zero. More routes always score higher, though each extra route adds a little less.
