@@ -23,7 +23,11 @@ function SuburbFinderForm({ values, onChange, onSubmit, submitting, liveRanking,
           value={values.budget}
           onChange={handleFieldChange('budget')}
           required
+          aria-describedby="budget-hint"
         />
+        <p id="budget-hint" className="field-hint">
+          The most you can pay. Suburbs with nothing at or below this are left out.
+        </p>
       </div>
 
       <div className="field">

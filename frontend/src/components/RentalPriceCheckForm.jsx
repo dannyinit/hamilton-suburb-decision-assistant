@@ -93,7 +93,7 @@ function RentalPriceCheckForm({
       </div>
 
       <div className="field">
-        <label htmlFor="rent">Your weekly rent ($, optional)</label>
+        <label htmlFor="rent">Rent you've been quoted ($/week, optional)</label>
         <input
           id="rent"
           type="number"
@@ -102,7 +102,9 @@ function RentalPriceCheckForm({
           placeholder="e.g. 600"
           value={values.rent}
           onChange={handleFieldChange('rent')}
+          aria-describedby="rent-hint"
         />
+        <p id="rent-hint" className="field-hint">Compare a specific listing with the market.</p>
       </div>
 
       <button type="submit" disabled={suburbsLoading || Boolean(suburbsError) || submitting}>
