@@ -201,9 +201,10 @@ function SuburbFinder() {
     <section className="suburb-finder">
       <h2>Suburb Finder</h2>
       <p className="lede">
-        Enter your weekly budget and press "Find suburbs" to get started. Once
-        you have results, adjusting the sliders or destination updates the
-        ranking live — budget changes still need "Find suburbs" pressed again.
+        Enter your weekly budget and press "Find suburbs". Once results are
+        showing, they update as you move the sliders or change the
+        destination, as long as Live ranking is on. If you change the budget,
+        press "Find suburbs" again.
       </p>
 
       <div className="feature-layout">

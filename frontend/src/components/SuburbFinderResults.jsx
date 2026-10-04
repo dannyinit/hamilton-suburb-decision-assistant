@@ -72,7 +72,7 @@ function formatTransport({ value }) {
 // non-null, since the row itself doesn't exist without one.
 function getCriteria(destination) {
   return [
-    { key: 'rent', label: 'Median Rent', formatValue: ({ value }) => `$${value}/week` },
+    { key: 'rent', label: 'Median rent', formatValue: ({ value }) => `$${value}/week` },
     { key: 'transport', label: 'Transport', formatValue: formatTransport },
     { key: 'distance', label: `Distance to ${destination}`, formatValue: ({ value }) => formatDistance(value) },
   ];
@@ -269,6 +269,12 @@ function SuburbFinderResults({ status, data, errorMessage, isRefreshing }) {
 
   return (
     <div className={`status-card ok result-card${isRefreshing ? ' is-refreshing' : ''}`}>
+      {/* Count and budget come from the response, not the form: with Live
+          ranking, the budget field can be edited without re-running the
+          search, and this line must describe the results actually shown. */}
+      <p className="suburb-ranking-count">
+        {data.results.length} {data.results.length === 1 ? 'suburb is' : 'suburbs are'} within your budget of ${data.budget}/week.
+      </p>
       <RankingLegend />
 
       <p className="suburb-ranking-hint">Select a suburb to see how it scored on each criterion.</p>

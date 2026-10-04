@@ -453,8 +453,20 @@
 
 /* Suburb Finder */
 
+.suburb-ranking-count {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  color: #1c1917;
+}
+
+/* A light panel, the same tint as the Budget check band (both are
+   supporting information), with no border, teal or heading so it doesn't
+   compete with the list below it. */
 .suburb-ranking-legend {
   margin: 0 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 4px;
+  background: #fafaf9;
   font-size: 0.8rem;
   color: #78716c;
 }
@@ -684,9 +696,11 @@
   color: #57534e;
 }
 
+/* Same size as the breakdown's values, semibold: it isn't used for ranking,
+   so it shouldn't outrank the scores visually. */
 .lowest-rent-figure strong {
   margin-left: 0.25rem;
-  font-size: 1.05rem;
+  font-weight: 600;
   color: #1c1917;
 }
 
