@@ -70,10 +70,15 @@ function LowSampleMarker({ warning }) {
 // it's stale. Unlike LowSampleMarker this is NOT aria-hidden — the
 // staleness_warning sentence (same one the primary result's banner shows)
 // is the only place that information exists for screen-reader users.
+// The quarter label never splits, but the ⚠ may wrap under it when the
+// table is short of width (phones), instead of forcing a wider column.
 function AsOfCell({ row }) {
   return (
     <td className={row.staleness_warning ? 'as-of is-stale' : 'as-of'}>
-      {row.timeframe_label}
+      <span className="nowrap">{row.timeframe_label}</span>
+      {/* A break opportunity with no visible space: the two spans would
+          otherwise stay glued together on one line. */}
+      {row.staleness_warning && <wbr />}
       {row.staleness_warning && (
         <span
           className="stale-marker"
@@ -98,27 +103,32 @@ function BedsSubtable({ beds }) {
     return <p className="no-beds-detail">No bedroom breakdown available for this dwelling type.</p>;
   }
 
+  // The wrapper stops this nested table from widening the outer table's
+  // columns (a full-width colspan cell otherwise inflates them, pushing the
+  // table past the card at phone width); it still fills the row it sits in.
   return (
-    <table className="beds-subtable">
-      <thead>
-        <tr>
-          <th scope="col">Bedrooms</th>
-          <th scope="col">Median rent</th>
-          <th scope="col">Sample size</th>
-          <th scope="col">As of</th>
-        </tr>
-      </thead>
-      <tbody>
-        {beds.map((bed) => (
-          <tr key={bed.number_of_beds}>
-            <th scope="row">{getNumberOfBedsLabel(bed.number_of_beds)}</th>
-            <td>${bed.median_rent}/week</td>
-            <td>{bed.total_bonds}<LowSampleMarker warning={bed.low_sample_warning} /></td>
-            <AsOfCell row={bed} />
+    <div className="beds-subtable-wrap">
+      <table className="beds-subtable">
+        <thead>
+          <tr>
+            <th scope="col">Bedrooms</th>
+            <th scope="col">Median rent</th>
+            <th scope="col">Bonds</th>
+            <th scope="col">As of</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {beds.map((bed) => (
+            <tr key={bed.number_of_beds}>
+              <th scope="row">{getNumberOfBedsLabel(bed.number_of_beds)}</th>
+              <td>${bed.median_rent}/week</td>
+              <td>{bed.total_bonds}<LowSampleMarker warning={bed.low_sample_warning} /></td>
+              <AsOfCell row={bed} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -168,65 +178,69 @@ function DwellingTypeBreakdownTable({ breakdown, suburbName, footnote, staleFoot
   const showFootnote = Boolean(footnote) && visibleRows.some((row) => row.low_sample_warning);
   const showStaleFootnote = Boolean(staleFootnote) && visibleRows.some((row) => row.staleness_warning);
 
+  // Focusable and labelled so keyboard users can scroll it when it's wider
+  // than the card (an unfocusable scroll area can't be scrolled by keyboard).
   return (
-    <table className="dwelling-type-table">
-      <caption>Rent by dwelling type</caption>
-      <thead>
-        <tr>
-          <th scope="col">Dwelling type</th>
-          <th scope="col">Median rent</th>
-          <th scope="col">Sample size</th>
-          <th scope="col">As of</th>
-        </tr>
-      </thead>
-      <tbody>
-        {breakdown.map((dt) => {
-          const isExpanded = expandedTypes.has(dt.dwelling_type);
-          return (
-            <Fragment key={dt.dwelling_type}>
-              <tr className={dt.is_current ? 'dwelling-type-row is-current' : 'dwelling-type-row'}>
-                <th scope="row">
-                  <button
-                    type="button"
-                    className="dwelling-type-toggle"
-                    aria-expanded={isExpanded}
-                    onClick={() => toggle(dt.dwelling_type)}
-                  >
-                    <span className="dwelling-type-chevron" aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
-                    {getDwellingTypeLabel(dt.dwelling_type)}
-                  </button>
-                  {dt.is_current && <span className="current-tag">(shown above)</span>}
-                </th>
-                <td>${dt.median_rent}/week</td>
-                <td>{dt.total_bonds}<LowSampleMarker warning={dt.low_sample_warning} /></td>
-                <AsOfCell row={dt} />
-              </tr>
-              {isExpanded && (
-                <tr className="dwelling-type-beds-row">
-                  <td colSpan={4}>
-                    <BedsSubtable beds={dt.beds} />
-                  </td>
+    <div className="dwelling-type-table-scroll" tabIndex={0} role="region" aria-label="Rent by dwelling type">
+      <table className="dwelling-type-table">
+        <caption>Rent by dwelling type</caption>
+        <thead>
+          <tr>
+            <th scope="col">Dwelling type</th>
+            <th scope="col">Median rent</th>
+            <th scope="col">Bonds</th>
+            <th scope="col">As of</th>
+          </tr>
+        </thead>
+        <tbody>
+          {breakdown.map((dt) => {
+            const isExpanded = expandedTypes.has(dt.dwelling_type);
+            return (
+              <Fragment key={dt.dwelling_type}>
+                <tr className={dt.is_current ? 'dwelling-type-row is-current' : 'dwelling-type-row'}>
+                  <th scope="row">
+                    <button
+                      type="button"
+                      className="dwelling-type-toggle"
+                      aria-expanded={isExpanded}
+                      onClick={() => toggle(dt.dwelling_type)}
+                    >
+                      <span className="dwelling-type-chevron" aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
+                      {getDwellingTypeLabel(dt.dwelling_type)}
+                    </button>
+                    {dt.is_current && <span className="current-tag">(shown above)</span>}
+                  </th>
+                  <td>${dt.median_rent}/week</td>
+                  <td>{dt.total_bonds}<LowSampleMarker warning={dt.low_sample_warning} /></td>
+                  <AsOfCell row={dt} />
                 </tr>
-              )}
-            </Fragment>
-          );
-        })}
-      </tbody>
-      {(showFootnote || showStaleFootnote) && (
-        <tfoot>
-          {showFootnote && (
-            <tr>
-              <td colSpan={4}>† {footnote}</td>
-            </tr>
-          )}
-          {showStaleFootnote && (
-            <tr>
-              <td colSpan={4}>⚠ {staleFootnote}</td>
-            </tr>
-          )}
-        </tfoot>
-      )}
-    </table>
+                {isExpanded && (
+                  <tr className="dwelling-type-beds-row">
+                    <td colSpan={4}>
+                      <BedsSubtable beds={dt.beds} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
+        </tbody>
+        {(showFootnote || showStaleFootnote) && (
+          <tfoot>
+            {showFootnote && (
+              <tr>
+                <td colSpan={4}>† {footnote}</td>
+              </tr>
+            )}
+            {showStaleFootnote && (
+              <tr>
+                <td colSpan={4}>⚠ {staleFootnote}</td>
+              </tr>
+            )}
+          </tfoot>
+        )}
+      </table>
+    </div>
   );
 }
 

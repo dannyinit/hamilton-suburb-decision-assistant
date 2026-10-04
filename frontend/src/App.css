@@ -315,6 +315,17 @@
    the nested <details> lists this was originally built with — column
    headers carry the "what level is this" signal that indentation/font-size
    alone didn't, addressing the hierarchy problem directly. */
+/* Scrolls the table sideways inside the card when it's wider than the card
+   (some suburbs at phone width); otherwise it has no visible effect. */
+.dwelling-type-table-scroll {
+  overflow-x: auto;
+}
+
+.dwelling-type-table-scroll:focus-visible {
+  outline: 2px solid #0e7490;
+  outline-offset: 2px;
+}
+
 .dwelling-type-table {
   width: 100%;
   margin-top: 1.25rem;
@@ -392,10 +403,6 @@
   font-weight: 600;
 }
 
-.as-of {
-  white-space: nowrap;
-}
-
 .as-of.is-stale {
   color: #92400e;
 }
@@ -419,6 +426,13 @@
   background: #f5f5f4;
 }
 
+/* Contributes no width of its own to the outer table's columns (width: 0),
+   but still fills the bedroom row (min-width: 100%). */
+.beds-subtable-wrap {
+  width: 0;
+  min-width: 100%;
+}
+
 .beds-subtable {
   width: 100%;
   border-collapse: collapse;
@@ -434,6 +448,38 @@
 
 .beds-subtable thead th {
   color: #6b6560;
+}
+
+/* At phone width the expanded bedroom table has to fit inside the card
+   (about 278px of content at 360px). Its widest content across all suburbs
+   is 254px, so the indent and column gaps share the remaining ~24px: a
+   0.5rem indent, 0.3rem between columns and none after the last. The grey
+   background still marks the rows as nested. The dwelling-type table itself
+   only just fits (its last column has no right padding, and a stale row's ⚠
+   can wrap under the quarter); .dwelling-type-table-scroll is a safety net
+   that lets it scroll sideways inside the card on narrower screens instead
+   of spilling past the card's edge. */
+@media (max-width: 480px) {
+  /* Child combinator: the nested table's own cells sit inside this row too. */
+  .dwelling-type-beds-row > td {
+    padding: 0.6rem 0 0.75rem 0.5rem;
+  }
+
+  .beds-subtable th,
+  .beds-subtable td {
+    padding-right: 0.3rem;
+  }
+
+  .beds-subtable th:last-child,
+  .beds-subtable td:last-child {
+    padding-right: 0;
+  }
+
+  /* Same for the dwelling-type table's last column: no gap is needed after
+     it, and the width goes to the content instead. */
+  .dwelling-type-table > * > tr > :last-child {
+    padding-right: 0;
+  }
 }
 
 .no-beds-detail {
