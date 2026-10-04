@@ -129,7 +129,7 @@
 .field select,
 .field input {
   padding: 0.5rem;
-  border: 1px solid #a8a29e;
+  border: 1px solid #8a837e;
   border-radius: 4px;
   font-size: 1rem;
 }
@@ -147,7 +147,7 @@
 }
 
 .field-hint {
-  color: #78716c;
+  color: #6b6560;
   font-size: 0.8rem;
   margin: 0;
 }
@@ -381,7 +381,7 @@
 }
 
 .dwelling-type-chevron {
-  color: #a8a29e;
+  color: #8a837e;
   font-size: 0.75rem;
 }
 
@@ -416,7 +416,7 @@
    own level; this covers Section A vs. Section B). */
 .dwelling-type-beds-row td {
   padding: 0.75rem 0.5rem 1rem 1.5rem;
-  background: #fafaf9;
+  background: #f5f5f4;
 }
 
 .beds-subtable {
@@ -433,12 +433,12 @@
 }
 
 .beds-subtable thead th {
-  color: #78716c;
+  color: #6b6560;
 }
 
 .no-beds-detail {
   margin: 0;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .dwelling-type-table tfoot tr:first-child td {
@@ -447,7 +447,7 @@
 
 .dwelling-type-table tfoot td {
   padding-top: 0.25rem;
-  color: #78716c;
+  color: #6b6560;
   font-size: 0.8rem;
 }
 
@@ -461,14 +461,17 @@
 
 /* A light panel, the same tint as the Budget check band (both are
    supporting information), with no border, teal or heading so it doesn't
-   compete with the list below it. */
+   compete with the list below it. The tint is the page background colour:
+   #fafaf9 was barely distinguishable from the white card on many screens.
+   Rental Price Check's expanded bedroom rows use it too. All text on it
+   passes WCAG AA (#6b6560 is 5.27:1 here, #57534e 6.99:1). */
 .suburb-ranking-legend {
   margin: 0 0 0.75rem;
   padding: 0.6rem 0.75rem;
   border-radius: 4px;
-  background: #fafaf9;
+  background: #f5f5f4;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .suburb-ranking-legend p {
@@ -495,7 +498,7 @@
 .suburb-ranking-hint {
   margin: 0 0 0.4rem;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 /* Column labels above the list: the same flex layout, gap and horizontal
@@ -514,7 +517,7 @@
 .suburb-ranking-header .suburb-ranking-score {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .suburb-ranking-header .suburb-ranking-chevron {
@@ -566,7 +569,7 @@
 }
 
 .suburb-ranking-chevron {
-  color: #a8a29e;
+  color: #8a837e;
   transition: transform 0.15s ease;
 }
 
@@ -594,7 +597,7 @@
 .suburb-details-subtitle {
   margin: 0.1rem 0 0;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .score-breakdown {
@@ -681,13 +684,13 @@
    border-top separating it from the summary row — no border here too,
    or the two separators would sit stacked right on top of each other. */
 .budget-check {
-  /* A very light grey band, full width of the row (cancelling the row's
-     horizontal padding), so the budget figure reads as separate from the
-     scores without another border. */
+  /* A light grey band (the same tint as the ranking legend), full width of
+     the row (cancelling the row's horizontal padding), so the budget figure
+     reads as separate from the scores without another border. */
   margin-left: -0.8rem;
   margin-right: -0.8rem;
   padding: 0.75rem 0.8rem;
-  background: #fafaf9;
+  background: #f5f5f4;
 }
 
 .lowest-rent-figure {
@@ -707,7 +710,7 @@
 .lowest-rent-meta {
   margin: 0.1rem 0 0;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 /* Keeps a quarter label like "Q1 2026" from splitting across lines. */
@@ -723,7 +726,7 @@
 .lowest-rent-note {
   margin: 0.4rem 0 0;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 /* Small-sample marker: the banner-warning amber, as a compact tag. It's a
@@ -837,7 +840,7 @@
 .about-author {
   margin: 0 0 1.25rem;
   font-size: 0.85rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .about-card {
@@ -890,7 +893,7 @@
   padding-top: 1rem;
   border-top: 1px solid #e7e5e4;
   font-size: 0.8rem;
-  color: #78716c;
+  color: #6b6560;
 }
 
 .data-sources-title {
