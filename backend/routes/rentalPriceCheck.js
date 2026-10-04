@@ -236,7 +236,7 @@ function computeRentalPriceCheck(query) {
         dwelling_type: dwellingType,
         number_of_beds: numberOfBeds,
         insufficient_data: true,
-        message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bed counts.`,
+        message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bedroom counts.`,
       },
     };
   }

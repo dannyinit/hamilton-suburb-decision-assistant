@@ -75,7 +75,7 @@ function RentalPriceCheckForm({
           value={values.number_of_beds}
           onChange={handleFieldChange('number_of_beds')}
         >
-          <option value="">Any (all bed counts)</option>
+          <option value="">Any number of bedrooms</option>
           {bedsToShow.map((option) => (
             <option key={option.value} value={option.value} title={option.title}>
               {option.label}

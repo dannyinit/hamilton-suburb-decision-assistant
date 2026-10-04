@@ -174,11 +174,18 @@ and applies fixed random rounding to base 3, so 6 is the smallest count that is 
 published — the observed floor across the whole rent table (only 6, 9, 12, … occur),
 which is why the code's `<=` never needs to be `<`. The primary result carries
 `low_sample_warning` and a full-sentence `low_sample_note` (*"This figure is based on
-a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a
+a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a
 rough indication only."*). Breakdown rows carry only the boolean, and the shared
 `low_sample_footnote` is attached **only when at least one breakdown row is flagged**,
 so a compact marker per row can point at one explanation instead of repeating the
 sentence.
+
+"At least one breakdown row" includes the bedroom rows nested inside each dwelling
+type (`dwelling_type_breakdown[].beds`), for both footnotes. The frontend starts with
+every dwelling type collapsed, so it shows each footnote only when a row *on screen*
+carries that marker; expanding a dwelling type reveals its bedroom rows and, if they
+need it, the footnote with them. The response's footnotes stay as they are for API
+consumers.
 
 #### Dwelling-type breakdown
 
@@ -281,7 +288,7 @@ truncated to the House row's first three bed rows and the Room row is omitted:
       ]
     }
   ],
-  "low_sample_footnote": "Based on a small sample (6 bonds — the smallest sample MBIE publishes); treat as a rough indication.",
+  "low_sample_footnote": "Based on a small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication.",
   "stale_footnote": "This data is older than the most recent data available (Q2 2026)."
 }
 ```
@@ -579,7 +586,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "timeframe": "2026-04-01",
         "timeframe_label": "Q2 2026",
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication only."
       }
     }
   ],
@@ -596,7 +603,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "timeframe": "2026-01-01",
         "timeframe_label": "Q1 2026",
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication only."
       }
     },
     {
@@ -611,7 +618,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
         "timeframe": "2025-10-01",
         "timeframe_label": "Q4 2025",
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication only."
       }
     }
   ]
@@ -674,7 +681,7 @@ here the same way):
         "timeframe": "2026-01-01",
         "timeframe_label": "Q1 2026",
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication only."
       }
     },
     {
@@ -689,7 +696,7 @@ here the same way):
         "timeframe": "2025-10-01",
         "timeframe_label": "Q4 2025",
         "low_sample_warning": true,
-        "low_sample_note": "This figure is based on a very small sample (6 bonds — the smallest sample MBIE publishes) — treat it as a rough indication only."
+        "low_sample_note": "This figure is based on a very small sample of 6 bonds, the smallest sample MBIE publishes. Treat it as a rough indication only."
       }
     }
   ]

@@ -126,8 +126,8 @@ function RentalPriceCheck() {
     <section className="rental-price-check">
       <h2>Rental Price Check</h2>
       <p className="lede">
-        Look up the market rent for a suburb, dwelling type and bed count, and
-        optionally compare it against a rent you've been quoted.
+        Look up the market rent for a suburb, dwelling type and number of
+        bedrooms, and optionally compare it against a rent you've been quoted.
       </p>
 
       <div className="feature-layout">

@@ -47,7 +47,7 @@ export const NUMBER_OF_BEDS_OPTIONS = [
   {
     value: '5+',
     label: '5 or more bedrooms',
-    title: "Separate MBIE category from 'Exactly 5 bedrooms' — a broader 5-or-more aggregate, not a duplicate.",
+    title: "Separate MBIE category from 'Exactly 5 bedrooms'. It's a broader 5-or-more aggregate, not a duplicate.",
   },
 ];
 

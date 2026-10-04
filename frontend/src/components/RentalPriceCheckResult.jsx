@@ -21,7 +21,7 @@ function dwellingTypeFallbackNote(data) {
   const dwellingTypePlural = anyType ? 'dwellings' : getDwellingTypePluralLabel(data.requested_dwelling_type);
   const medianSubject = anyType ? 'the median rent' : `the ${getDwellingTypeLabel(data.requested_dwelling_type)} median rent`;
 
-  return `No data for ${dwellingTypePlural} ${getWithBedsPhrase(data.requested_number_of_beds)} in ${data.sa2_name} — showing ${medianSubject} across all bed counts instead.`;
+  return `No data for ${dwellingTypePlural} ${getWithBedsPhrase(data.requested_number_of_beds)} in ${data.sa2_name}, so this shows ${medianSubject} across all bedroom counts instead.`;
 }
 
 // fallback_level 'full' means: neither the exact bed count nor the exact
@@ -31,7 +31,7 @@ function dwellingTypeFallbackNote(data) {
 // count — there's nothing specific left to say about beds.
 function fullFallbackNote(data) {
   const dwellingTypePlural = getDwellingTypePluralLabel(data.requested_dwelling_type);
-  return `No data for ${dwellingTypePlural} in ${data.sa2_name} — showing the median rent across all dwelling types and bed counts instead.`;
+  return `No data for ${dwellingTypePlural} in ${data.sa2_name}, so this shows the median rent across all dwelling types and bedroom counts instead.`;
 }
 
 // Names what the figures below describe — the actual dwelling type/bed
@@ -44,7 +44,7 @@ function primaryDescription(data) {
   const dwellingType = anyType ? 'dwellings' : getDwellingTypePluralLabel(data.dwelling_type);
 
   let subject;
-  if (anyType && anyBeds) subject = 'all dwelling types and bed counts';
+  if (anyType && anyBeds) subject = 'all dwelling types and bedroom counts';
   else if (anyBeds) subject = `${dwellingType} with any number of bedrooms`;
   else subject = `${dwellingType} ${getWithBedsPhrase(data.number_of_beds)}`;
 
@@ -54,9 +54,16 @@ function primaryDescription(data) {
 // Compact per-row indicator for low_sample_warning, replacing a repeated
 // full-sentence banner — the explanation itself appears once, in the
 // table's shared footnote (see DwellingTypeBreakdownTable's `footnote`).
+// The † itself is hidden from screen readers (read aloud it's just
+// "dagger"); the visually hidden text says what it marks instead.
 function LowSampleMarker({ warning }) {
   if (!warning) return null;
-  return <sup className="low-sample-marker" aria-hidden="true">†</sup>;
+  return (
+    <>
+      <sup className="low-sample-marker" aria-hidden="true">†</sup>
+      <span className="visually-hidden"> (small sample)</span>
+    </>
+  );
 }
 
 // Per-row "As of" cell: the row's own timeframe, plus a warning icon when
@@ -88,14 +95,14 @@ function AsOfCell({ row }) {
 // empty table.
 function BedsSubtable({ beds }) {
   if (beds.length === 0) {
-    return <p className="no-beds-detail">No bed-count breakdown available for this dwelling type.</p>;
+    return <p className="no-beds-detail">No bedroom breakdown available for this dwelling type.</p>;
   }
 
   return (
     <table className="beds-subtable">
       <thead>
         <tr>
-          <th scope="col">Beds</th>
+          <th scope="col">Bedrooms</th>
           <th scope="col">Median rent</th>
           <th scope="col">Sample size</th>
           <th scope="col">As of</th>
@@ -147,11 +154,19 @@ function DwellingTypeBreakdownTable({ breakdown, suburbName, footnote, staleFoot
       <section className="dwelling-type-empty">
         <h3>Rent by dwelling type</h3>
         <p className="no-beds-detail">
-          No breakdown by dwelling type is available for {suburbName} — only the overall figure above has enough data.
+          No breakdown by dwelling type is available for {suburbName}. Only the overall figure above has enough data.
         </p>
       </section>
     );
   }
+
+  // The backend attaches each footnote when ANY row in the breakdown needs
+  // it, including bedroom rows inside collapsed dwelling types. Show it only
+  // when a row on screen carries that marker, so a footnote never explains
+  // something the user can't see (it appears as soon as the row does).
+  const visibleRows = breakdown.flatMap((dt) => (expandedTypes.has(dt.dwelling_type) ? [dt, ...dt.beds] : [dt]));
+  const showFootnote = Boolean(footnote) && visibleRows.some((row) => row.low_sample_warning);
+  const showStaleFootnote = Boolean(staleFootnote) && visibleRows.some((row) => row.staleness_warning);
 
   return (
     <table className="dwelling-type-table">
@@ -197,14 +212,14 @@ function DwellingTypeBreakdownTable({ breakdown, suburbName, footnote, staleFoot
           );
         })}
       </tbody>
-      {(footnote || staleFootnote) && (
+      {(showFootnote || showStaleFootnote) && (
         <tfoot>
-          {footnote && (
+          {showFootnote && (
             <tr>
               <td colSpan={4}>† {footnote}</td>
             </tr>
           )}
-          {staleFootnote && (
+          {showStaleFootnote && (
             <tr>
               <td colSpan={4}>⚠ {staleFootnote}</td>
             </tr>

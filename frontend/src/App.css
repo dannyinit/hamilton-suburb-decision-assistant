@@ -713,6 +713,19 @@
   color: #6b6560;
 }
 
+/* Text for screen readers only (e.g. what a † marker means). */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Keeps a quarter label like "Q1 2026" from splitting across lines. */
 .nowrap {
   white-space: nowrap;

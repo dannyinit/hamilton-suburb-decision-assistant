@@ -1,17 +1,19 @@
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-// number_of_beds is 'ALL', a specific count ('1', '5+'), or null (a
-// distinct MBIE category, not a duplicate of 'ALL' — see
-// backend/README.md) — 'ALL' and null both just mean "no specific bed
-// count to name", so both fall through to showing the dwelling type alone.
+// number_of_beds is 'ALL', a specific count ('1', '5+'), or null (MBIE's
+// "NA" category: bonds with the number of bedrooms not recorded, a distinct
+// category, not a duplicate of 'ALL' — see backend/README.md). 'ALL' shows
+// the dwelling type alone; null says so explicitly, since the type alone
+// would read as the all-bedrooms figure.
 // dwelling_type 'ALL' only reaches here when a suburb has no recent specific
 // dwelling-type row (see backend/README.md's "Budget filtering" section), and is
 // spelled out so it can't be read as one particular type.
 function formatDwellingType(dwellingType, numberOfBeds) {
   const type = dwellingType === 'ALL' ? 'all dwelling types combined' : dwellingType;
-  if (!numberOfBeds || numberOfBeds === 'ALL') return type;
-  return `${type}, ${numberOfBeds} bed${numberOfBeds === '1' ? '' : 's'}`;
+  if (numberOfBeds === 'ALL') return type;
+  if (!numberOfBeds) return `${type}, bedrooms not recorded`;
+  return `${type}, ${numberOfBeds} bedroom${numberOfBeds === '1' ? '' : 's'}`;
 }
 
 // insufficient_data with data_status 'CURRENT' means the suburb's rent data
@@ -226,7 +228,7 @@ function ExcludedList({ excluded }) {
       <ul>
         {excluded.map((item) => (
           <li key={item.sa2_code}>
-            <strong>{item.sa2_name}</strong> — {EXCLUSION_LABEL[item.reason]?.(item) ?? item.reason}
+            <strong>{item.sa2_name}</strong>: {EXCLUSION_LABEL[item.reason]?.(item) ?? item.reason}
           </li>
         ))}
       </ul>
