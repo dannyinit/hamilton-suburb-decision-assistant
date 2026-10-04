@@ -109,8 +109,8 @@ function About() {
           <p>
             A suburb is only included if its cheapest option is at or below
             your budget. The cheapest option is the lowest median rent for any
-            dwelling type and number of bedrooms there, using data from within
-            a year of the latest quarter.
+            dwelling type and number of bedrooms in that suburb, using data
+            from within a year of the latest quarter.
           </p>
           <p>Suburbs are scored and ranked on the following criteria:</p>
           <ul>
@@ -120,13 +120,14 @@ function About() {
             </li>
             <li>
               <strong>Transport:</strong> the average number of bus routes
-              within 400 m across the suburb. More routes score higher, though
-              each extra route adds a little less.
+              with a stop within 400 m, measured at points spread across the
+              suburb. More routes score higher, though each extra route adds a
+              little less.
             </li>
             <li>
               <strong>Distance:</strong> straight-line distance from the
-              suburb's centre to your chosen destination. Shorter scores higher.
-              Only used once you pick a destination.
+              suburb's centre to your chosen destination. Shorter distances
+              score higher. Only used once you pick a destination.
             </li>
           </ul>
           <p>
@@ -142,9 +143,9 @@ function About() {
             covers the middle half of rents. Below the lower quartile is{' '}
             <strong>Below market</strong>, above the upper quartile is{' '}
             <strong>Above market</strong>, and anything in between, including
-            either quartile exactly, is <strong>Fair</strong>. If there's no data
-            for the exact dwelling type and number of bedrooms, the comparison
-            uses the broader estimate shown instead.
+            either quartile exactly, is <strong>Fair</strong>. If there isn't
+            enough data for the exact dwelling type and number of bedrooms, the
+            comparison uses the broader estimate shown in the result.
           </p>
         </AboutSection>
 

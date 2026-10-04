@@ -46,7 +46,7 @@ function formatDistance(metres) {
 // stop in range count 0), and showing it would offer users a second, unscored
 // signal for "is this suburb good on transport". The title adds the
 // zero-for-unserved-areas detail the shorter legend leaves out, for hover.
-const TRANSPORT_EXPLANATION = "Average number of bus routes within 400 m across the suburb; areas with no stop count as zero. More routes always score higher, each a little less than the last.";
+const TRANSPORT_EXPLANATION = "Average number of bus routes with a stop within 400 m, measured at points spread across the suburb; points with no stop within 400 m count as zero. More routes always score higher, each a little less than the last.";
 
 function formatTransport({ value }) {
   const rounded = value.toFixed(1);
@@ -204,10 +204,10 @@ function RankingLegend() {
           <strong>Rent:</strong> the suburb's median weekly rent across all dwelling types. Lower rent scores higher.
         </li>
         <li>
-          <strong>Transport:</strong> the average number of bus routes within 400 m across the suburb. More routes score higher, though each extra route adds a little less.
+          <strong>Transport:</strong> the average number of bus routes with a stop within 400 m, measured at points spread across the suburb. More routes score higher, though each extra route adds a little less.
         </li>
         <li>
-          <strong>Distance:</strong> straight-line distance from the suburb's centre to your chosen destination. Shorter scores higher. Only used once you pick a destination.
+          <strong>Distance:</strong> straight-line distance from the suburb's centre to your chosen destination. Shorter distances score higher. Only used once you pick a destination.
         </li>
       </ul>
       <p>
