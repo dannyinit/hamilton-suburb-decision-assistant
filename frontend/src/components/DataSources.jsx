@@ -12,7 +12,9 @@
 //   Stats NZ SA2 2019 layers ..... CC BY 4.0 (data.govt.nz catalogue entries)
 //   Waikato bus stops ............ CC BY 4.0; the council's own wording is
 //                                  "© Waikato Regional Council 2022 Licensed
-//                                  under CC BY 4.0."
+//                                  under CC BY 4.0." (shown below with the
+//                                  same ", licensed under" punctuation as the
+//                                  other lines; the notice itself is unchanged)
 //   Hamilton Lake outline ........ ODbL 1.0; "© OpenStreetMap contributors"
 //
 // CC BY also asks that changes be indicated, hence the closing sentence
@@ -45,14 +47,14 @@ function DataSources() {
           <ExternalLink href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</ExternalLink>.
         </li>
         <li>
-          Bus stops: © Waikato Regional Council 2022. Licensed under{' '}
+          Bus stops: © Waikato Regional Council 2022, licensed under{' '}
           <ExternalLink href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</ExternalLink>.
         </li>
         <li>
           Hamilton Lake outline: ©{' '}
           <ExternalLink href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</ExternalLink>
           , available under the{' '}
-          <ExternalLink href="https://opendatacommons.org/licenses/odbl/1-0/">Open Database Licence</ExternalLink>.
+          <ExternalLink href="https://opendatacommons.org/licenses/odbl/1-0/">Open Database License</ExternalLink>.
         </li>
       </ul>
       <p className="data-sources-note">

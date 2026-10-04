@@ -877,9 +877,58 @@
   margin-bottom: 0.35rem;
 }
 
-.about-note {
-  color: #57534e;
-  font-size: 0.9rem;
+/* Collapsible reference sections, styled like the Suburb Finder list: no
+   default marker, a ▸ chevron on the right that turns when open, and the
+   whole row as the click target. Light dividers make the closed headings
+   read as one set; the card's own border closes it off. */
+.about-section {
+  border-top: 1px solid #e7e5e4;
+}
+
+.about-section:first-of-type {
+  margin-top: 1.25rem;
+}
+
+.about-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.35rem 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.about-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.about-section summary:focus-visible {
+  outline: 2px solid #0e7490;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.about-card .about-section summary h3 {
+  margin: 0;
+}
+
+.about-section-chevron {
+  color: #8a837e;
+  transition: transform 0.15s ease;
+}
+
+.about-section[open] .about-section-chevron {
+  transform: rotate(90deg);
+}
+
+.about-section-body {
+  padding-bottom: 0.5rem;
+}
+
+.about-section-body > h4:first-child {
+  margin-top: 0.25rem;
 }
 
 @media (max-width: 480px) {
