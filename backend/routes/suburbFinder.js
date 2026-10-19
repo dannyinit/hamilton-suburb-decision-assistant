@@ -14,27 +14,18 @@ const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 // suburb_data_status.data_status='CURRENT' suburbs — the stable population
 // everything normalises against, never recomputed from a request's
 // budget-filtered subset, or the floor wouldn't protect against anything.
-// That's all 62 suburbs since the Q2 2026 data pull; re-deriving then gave
-// the same values. Rent and
-// transport are flat constants; distance is 10% of each destination's own
-// full-population range, since the four destinations sit at genuinely
-// different distances from the city (confirmed against real geography
-// before being hardcoded here). Transport's 0.3 is likewise ~10% of its
-// full-population range (sqrt(avg_routes) 0.259–3.088, so 0.283).
+// Rent and transport are flat constants; distance is 10% of each
+// destination's own full-population range, since the four destinations sit
+// at genuinely different distances from the city (confirmed against real
+// geography before being hardcoded here). Transport's 0.3 is likewise ~10%
+// of its full-population range (sqrt(avg_routes) 0.259–3.088, so 0.283).
 //
 // This guards a different scenario from ROUNDING_STEP below: it stops a
 // genuinely tight population (e.g. a heavily budget-narrowed `included`
 // set) from being stretched to fill [0,1] as if its small spread were the
-// full story. Checked against the Q2 2026 data across every $5-step
-// budget from $100 to $1,200, for each destination and for none (201
-// budgets, $200 upwards, leave >= 2 suburbs): only the transport floor
-// ever engages, at $200–$255, where just Kahikatea and Pukete East survive
-// (a 0.12 span, so Pukete East scores 0.4 rather than 1 on transport),
-// joined by Melville North from $235 (0.22). From $260 the narrowest
-// transport span is 0.76. The rent floor never engages (narrowest span
-// $60, at $200), nor does the distance floor (narrowest span 1,900 m, to
-// the University at $200). It's a low-budget safety net, not the
-// mechanism doing routine work.
+// full story. It's a low-budget safety net, not the mechanism doing
+// routine work.
+// Data check: backend/README.md, GET /api/suburb-finder (Scoring).
 const RENT_THRESHOLD = 50;
 const TRANSPORT_THRESHOLD = 0.3;
 const DISTANCE_THRESHOLDS = {
