@@ -4,10 +4,9 @@ const db = require('../db');
 const router = express.Router();
 
 // Static reference data — all 62 suburbs, sa2_code + sa2_name — for
-// frontend suburb pickers (Rental Price Check's form today, Suburb
-// Finder's results/legend later). Cached once at startup, mirroring how
-// suburbFinder.js caches the 4-row destinations table: this list never
-// changes at runtime.
+// frontend suburb pickers (currently only Rental Price Check's form).
+// Cached once at startup, mirroring how suburbFinder.js caches the 4-row
+// destinations table: this list never changes at runtime.
 //
 // Deliberately unfiltered by suburb_data_status: that field describes
 // rent-data quality for Suburb Finder's hard constraints (ALL/ALL row

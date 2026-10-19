@@ -7,9 +7,9 @@ export default defineConfig({
   server: {
     // Forwards frontend calls to relative /api/* paths straight to the
     // backend during dev, so the browser never sees cross-origin requests
-    // and the backend needs no CORS config. Dev-only — see frontend/README.md
-    // for how this needs to be replaced (a real base URL, or a proxy on the
-    // production host) once this ships anywhere.
+    // and the backend needs no CORS config. Dev-only: in production, Express
+    // serves the built app (frontend/dist) and the API from one origin, so no
+    // proxy is needed (see frontend/README.md).
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

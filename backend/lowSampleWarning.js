@@ -8,7 +8,7 @@
 // cutoff: MBIE suppresses selections with fewer than 5 bonds and applies
 // fixed random rounding to base 3 to the rest, so the smallest published
 // count is 6 (confirmed: no row anywhere in the raw data is below 6).
-// Confirmed against real data (see suburbFinder.js's git history): a
+// Confirmed against the real data when this threshold was chosen: a
 // two-tier mild/strong design was tried first, but across all 60 CURRENT
 // suburbs a lowest_rent row's total_bonds was only ever 6, 9, 12, or 15 --
 // any boundary above 15 flagged 100% of suburbs, and <=6 is the only split

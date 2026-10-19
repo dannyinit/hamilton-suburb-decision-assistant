@@ -43,7 +43,8 @@ function SuburbFinder() {
 
   // Set only by live re-ranks (sliders/destination), never by the explicit
   // submit — orthogonal to `status`, so a live refresh never blanks the
-  // list the way `status` briefly did in Step 2. See runLiveRefresh below.
+  // list: setting `status` to 'loading' would make SuburbFinderResults show
+  // a loading message in place of the list. See runLiveRefresh below.
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // The "Live ranking" checkbox — on by default, preserving prior
@@ -63,9 +64,10 @@ function SuburbFinder() {
     return getSuburbFinder(buildRequestParams(requestValues), { signal });
   }
 
-  // The explicit "Find suburbs" path — sets the full status lifecycle,
-  // same as before Step 2. Never throttled: a button press should act on
-  // immediately, not wait out a throttle window meant for rapid dragging.
+  // The explicit "Find suburbs" path — sets the full status lifecycle
+  // (loading, then success or error). Never throttled: a button press
+  // should act on immediately, not wait out a throttle window meant for
+  // rapid dragging.
   async function runSearch(requestValues) {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
@@ -84,12 +86,12 @@ function SuburbFinder() {
     }
   }
 
-  // The slider/destination-triggered path — the Step 3 change. Never
-  // touches `status` or clears `result`: the list stays exactly as it was
-  // until the new data actually arrives, so nothing flashes or blanks
-  // mid-drag. A failure here is swallowed (logged, not surfaced) rather
-  // than replacing valid results with an error card over a background
-  // refresh the user didn't explicitly ask to see the outcome of.
+  // The slider/destination-triggered path. Never touches `status` or clears
+  // `result`: the list stays exactly as it was until the new data actually
+  // arrives, so nothing flashes or blanks mid-drag. A failure here is
+  // swallowed (logged, not surfaced) rather than replacing valid results
+  // with an error card over a background refresh the user didn't explicitly
+  // ask to see the outcome of.
   async function runLiveRefresh(requestValues) {
     abortControllerRef.current?.abort();
     const controller = new AbortController();
