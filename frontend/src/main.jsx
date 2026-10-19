@@ -1,11 +1,11 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import './index.css'
-import App from './App.jsx'
-import SuburbFinder from './components/SuburbFinder.jsx'
-import RentalPriceCheck from './components/RentalPriceCheck.jsx'
-import About from './components/About.jsx'
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import './index.css';
+import App from './App.jsx';
+import SuburbFinder from './components/SuburbFinder.jsx';
+import RentalPriceCheck from './components/RentalPriceCheck.jsx';
+import About from './components/About.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -25,4 +25,4 @@ createRoot(document.getElementById('root')).render(
       </Routes>
     </BrowserRouter>
   </StrictMode>,
-)
+);
