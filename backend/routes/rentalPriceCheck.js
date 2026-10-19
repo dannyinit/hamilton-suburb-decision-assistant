@@ -109,7 +109,7 @@ const NUMBER_OF_BEDS_ORDER = VALID_NUMBER_OF_BEDS.filter((beds) => beds !== 'ALL
 // whether to attach the single shared LOW_SAMPLE_FOOTNOTE at all (only
 // when at least one row in the table actually needs it), rather than
 // always including a footnote that might reference nothing on the page.
-// anyStale does the same for STALE_FOOTNOTE.
+// anyStale does the same for staleFootnote().
 function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
   const bedsByType = {};
   for (const row of findDwellingTypeBedsStmt.all(sa2Code)) {

@@ -11,11 +11,11 @@ const destinationsById = db.prepare('SELECT destination_id, name FROM destinatio
 const destinationByName = new Map(destinationsById.map((d) => [d.name, d]));
 
 // Minimum-meaningful-range floors for normalisation, precomputed from the
-// sa2_data_status='CURRENT' suburbs — the stable population everything
-// normalises against, never recomputed from a request's budget-filtered
-// subset, or the floor wouldn't protect against anything. That's all 62
-// suburbs since the Q2 2026 data pull; re-deriving then gave the same
-// values. Rent and
+// suburb_data_status.data_status='CURRENT' suburbs — the stable population
+// everything normalises against, never recomputed from a request's
+// budget-filtered subset, or the floor wouldn't protect against anything.
+// That's all 62 suburbs since the Q2 2026 data pull; re-deriving then gave
+// the same values. Rent and
 // transport are flat constants; distance is 10% of each destination's own
 // full-population range, since the four destinations sit at genuinely
 // different distances from the city (confirmed against real geography
