@@ -28,7 +28,9 @@ backend/
 │   ├── suburbFinder.js          # GET /api/suburb-finder
 │   └── suburbs.js               # GET /api/suburbs
 ├── tests/
-│   └── test_suburb_finder.py    # regression script, run against a live server
+│   ├── test_suburb_finder.py    # regression script, run against a live server
+│   ├── test_null_budget_rent.py # null guard on the budget figure; starts its own server on a modified db copy
+│   └── test_stale_budget_rent.py # recent-rows rule on the budget figure; starts its own server on a modified db copy
 └── test-examples.md             # ready-to-paste curl examples for manual testing
 ```
 
@@ -377,7 +379,7 @@ the same age rule (on the same column) that marks a whole suburb `STALE` in the
 data pipeline, applied here row by row (`STALE_THRESHOLD_QUARTERS` in
 `routes/suburbFinder.js`). Each rent row is its combination's latest quarter, and
 many specific rows are years old because MBIE omits thin quarters — in the Q2 2026
-data, 364 of the 543 specific rows with a median are 4+ quarters old. Without the
+data, 179 of the 543 specific rows with a median are 4+ quarters old. Without the
 rule, a suburb could pass the budget on an old figure: Hamilton Central's $125
 Boarding House row is from Q4 2024 (its recent cheapest is $280), and Hamilton East
 Cook's $140 Room row is from 2020 (recent cheapest $440). Applying it cut the
