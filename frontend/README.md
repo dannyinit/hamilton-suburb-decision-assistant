@@ -8,18 +8,55 @@ React frontend for the Hamilton Suburb Decision Assistant, built with
 - **React** (JS/JSX, no TypeScript) — per the project proposal
 - **Vite** for the dev server and build — chosen over Create React App, which is
   effectively unmaintained
-- Plain CSS, no component/design library — basic styling only at this stage
+- **React Router** for the three pages (Suburb Finder, Rental Price Check, About)
+- Plain CSS, no component/design library
+- **oxlint** for linting (`npm run lint`, configured in `.oxlintrc.json`)
+
+## Features
+
+- **Suburb Finder** (`/suburb-finder`, the default page): enter a weekly budget and an
+  optional destination, get a ranked list of suburbs with an overall score, an
+  expandable per-criterion score breakdown, a budget check, and a list of excluded
+  suburbs with the reason each was left out.
+- **Weight sliders with live re-ranking**: dragging the rent, transport or distance
+  slider re-ranks the results as you drag. Requests are throttled and any request
+  still in flight is cancelled when a newer one starts, so an older response can
+  never overwrite a newer one. A "Live ranking" checkbox turns this off.
+- **Rental Price Check** (`/rental-price-check`): pick a suburb, dwelling type and
+  number of bedrooms, optionally enter a weekly rent, and see the median and typical
+  range, a Below market / Fair / Above market label, and a rent breakdown by dwelling
+  type and bedrooms. Each suburb in Suburb Finder links here with the suburb and
+  dwelling type pre-filled.
+- **About** (`/about`): what the app does, how to use it, and its data sources.
+- A **Data sources** footer on every page credits each dataset, as its licence requires.
 
 ## Project structure
 
 ```
 frontend/
-├── index.html            # Vite entry HTML
-├── vite.config.js         # dev server config, incl. the /api proxy (see below)
+├── index.html                       # Vite entry HTML
+├── vite.config.js                   # dev server config, incl. the /api proxy (see below)
+├── .oxlintrc.json                   # linter config
+├── public/
+│   └── favicon.svg
 ├── src/
-│   ├── main.jsx            # React entry point
-│   ├── App.jsx              # top-level component
-│   ├── App.css, index.css   # basic styling
+│   ├── main.jsx                     # React entry point and route definitions
+│   ├── App.jsx                      # layout: app title, nav bar, current page, footer
+│   ├── App.css, index.css           # styling
+│   ├── api.js                       # fetch helpers for the backend API
+│   ├── throttle.js                  # leading + trailing throttle for live re-ranking
+│   ├── rentalCheckOptions.js        # dwelling type and bedroom options
+│   ├── suburbFinderOptions.js       # the four destinations
+│   └── components/
+│       ├── NavBar.jsx               # links to the three pages
+│       ├── SuburbFinder.jsx         # Suburb Finder page: state, requests, live re-ranking
+│       ├── SuburbFinderForm.jsx     # budget, destination, weight sliders
+│       ├── SuburbFinderResults.jsx  # ranked list, score breakdown, excluded suburbs
+│       ├── RentalPriceCheck.jsx     # Rental Price Check page: state and requests
+│       ├── RentalPriceCheckForm.jsx # suburb, dwelling type, bedrooms, rent
+│       ├── RentalPriceCheckResult.jsx # result card and rent breakdown table
+│       ├── About.jsx                # About page
+│       └── DataSources.jsx          # data sources footer
 └── README.md
 ```
 
@@ -41,18 +78,7 @@ dev, Vite's `server.proxy` config (in `vite.config.js`) forwards any `/api/*`
 request to `http://localhost:3001`, so the browser only ever talks to the Vite
 dev server on one origin — no CORS setup needed on the backend.
 
-This proxy is dev-only. It won't exist for a production build (`npm run build`
-serves static files with no backend attached) — deployment will need either a
-real backend base URL baked into the frontend, or a reverse proxy set up on
-whatever host serves both. Out of scope for now; noted here so it isn't
-forgotten later.
-
-## Current status
-
-Step 1 (this commit): project scaffold + backend connectivity check only. `App.jsx`
-calls `/api/health` on load and renders the raw response, to prove the dev
-server → proxy → backend chain works end to end before any real screens are
-built.
-
-Not yet built: the Rental Price Check form/results screen, Suburb Finder
-screens, routing between them, and any real styling system.
+This proxy is dev-only. In production, `npm run build` writes the app to
+`frontend/dist`, and the Express server serves it alongside the API from one
+origin, so the same relative paths keep working (see the root
+[README](../README.md)).
