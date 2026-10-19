@@ -153,7 +153,9 @@ function About() {
           <ul>
             <li>
               <strong>Rental prices:</strong> rental bond data from the Ministry
-              of Business, Innovation and Employment (MBIE).
+              of Business, Innovation and Employment (MBIE). It does not record
+              whether a place is furnished or has an ensuite, so compare like
+              with like.
             </li>
             <li>
               <strong>Suburb boundaries and centres:</strong> Statistical Area 2

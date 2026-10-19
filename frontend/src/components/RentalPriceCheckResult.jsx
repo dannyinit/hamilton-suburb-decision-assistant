@@ -320,6 +320,14 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </p>
       )}
 
+      {/* A known limit of the source data, promised in the proposal to be
+          shown to users. Always shown, since it affects the typical range
+          as well as the comparison label. */}
+      <div className="banner banner-info">
+        MBIE bond data does not record whether a place is furnished or has an
+        ensuite, so compare like with like.
+      </div>
+
       <DwellingTypeBreakdownTable breakdown={data.dwelling_type_breakdown} suburbName={data.sa2_name} footnote={data.low_sample_footnote} staleFootnote={data.stale_footnote} />
     </div>
   );
