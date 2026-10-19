@@ -17,8 +17,8 @@ built React frontend.
 
 ## Running the app
 
-Needs Node 22.12 or newer (Node 24 works locally; the deployed version is pinned, see
-Deployment).
+Needs Node 22.12 or newer, but below 23 (`engines` in the root `package.json` is
+`>=22.12.0 <23`; the deployed version is pinned to 22.23.2, see Deployment).
 
 - **As deployed (one server):** from the repo root, `npm run build && npm start`, then
   open http://localhost:3001 (override the port with `PORT`). `npm run build` installs and
@@ -26,7 +26,7 @@ Deployment).
 - **Development (hot reload):** in one terminal, `cd backend && npm install && npm start`;
   in another, `cd frontend && npm install && npm run dev`. Vite proxies `/api` to the
   backend on port 3001.
-- **Regression tests** (Suburb Finder, 79 checks; start the server first):
+- **Regression tests** (Suburb Finder, 89 checks; start the server first):
   `python3 backend/tests/test_suburb_finder.py`.
 
 The database, `data-pipeline/output/hamilton.db`, is **committed to the repo**, so none of
