@@ -158,11 +158,19 @@ function buildDwellingTypeBreakdown(sa2Code, currentDwellingType) {
   return { breakdown, anyLowSample, anyStale };
 }
 
-// Pure computation, decoupled from Express req/res, so both the real route
-// and the examples route below can share the exact same logic — the
-// examples route calls this directly (in-process) rather than making an
-// HTTP request back to the server.
-function computeRentalPriceCheck(query) {
+// A validation failure, in the { status, body } shape computeRentalPriceCheck
+// returns, wrapped as { error } so the caller can stop at the first invalid
+// parameter and return it unchanged.
+function badRequest(message) {
+  return { error: { status: 400, body: { error: message } } };
+}
+
+// Step 1: validate the query in a fixed order — sa2_code and dwelling_type
+// present, sa2_code, dwelling_type, number_of_beds, then rent — so a
+// request with several invalid parameters always reports the same one.
+// Returns { error } or { sa2Code, dwellingType, numberOfBeds, rent }
+// (rent is null when omitted).
+function parseRentalPriceCheckQuery(query) {
   const {
     sa2_code: sa2CodeRaw,
     dwelling_type: dwellingType,
@@ -171,19 +179,16 @@ function computeRentalPriceCheck(query) {
   } = query;
 
   if (!sa2CodeRaw || !dwellingType) {
-    return { status: 400, body: { error: 'sa2_code and dwelling_type are required' } };
+    return badRequest('sa2_code and dwelling_type are required');
   }
 
   const sa2Code = Number(sa2CodeRaw);
   if (!Number.isInteger(sa2Code)) {
-    return { status: 400, body: { error: 'sa2_code must be an integer' } };
+    return badRequest('sa2_code must be an integer');
   }
 
   if (!VALID_DWELLING_TYPES.includes(dwellingType)) {
-    return {
-      status: 400,
-      body: { error: `dwelling_type must be one of: ${VALID_DWELLING_TYPES.join(', ')}` },
-    };
+    return badRequest(`dwelling_type must be one of: ${VALID_DWELLING_TYPES.join(', ')}`);
   }
 
   // Omitted/empty means "any bed count" and maps to the standard ALL
@@ -193,25 +198,25 @@ function computeRentalPriceCheck(query) {
   // path and looking like missing data.
   const numberOfBeds = numberOfBedsRaw === undefined || numberOfBedsRaw === '' ? 'ALL' : numberOfBedsRaw;
   if (!VALID_NUMBER_OF_BEDS.includes(numberOfBeds)) {
-    return {
-      status: 400,
-      body: { error: `number_of_beds must be one of: ${VALID_NUMBER_OF_BEDS.join(', ')}` },
-    };
+    return badRequest(`number_of_beds must be one of: ${VALID_NUMBER_OF_BEDS.join(', ')}`);
   }
 
   let rent = null;
   if (rentRaw !== undefined) {
     rent = Number(rentRaw);
     if (!Number.isFinite(rent) || rent < 0) {
-      return { status: 400, body: { error: 'rent must be a non-negative number' } };
+      return badRequest('rent must be a non-negative number');
     }
   }
 
-  const suburb = findSuburbStmt.get(sa2Code);
-  if (!suburb) {
-    return { status: 404, body: { error: `Unknown sa2_code: ${sa2Code}` } };
-  }
+  return { sa2Code, dwellingType, numberOfBeds, rent };
+}
 
+// Step 2: the rent row to show, with its fallback tier: exact match, then
+// the same dwelling type across all bed counts ('dwelling_type'), then the
+// suburb's ALL/ALL row ('full'). Returns { row, fallbackLevel }; row is
+// undefined when the suburb has no usable row at all.
+function findRentWithFallback(sa2Code, dwellingType, numberOfBeds) {
   let row = findRentStmt.get(sa2Code, dwellingType, numberOfBeds);
   let fallbackLevel = 'none';
 
@@ -227,19 +232,28 @@ function computeRentalPriceCheck(query) {
     if (row) fallbackLevel = 'full';
   }
 
-  if (!row) {
-    return {
-      status: 200,
-      body: {
-        sa2_code: suburb.sa2_code,
-        sa2_name: suburb.sa2_name,
-        dwelling_type: dwellingType,
-        number_of_beds: numberOfBeds,
-        insufficient_data: true,
-        message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bedroom counts.`,
-      },
-    };
-  }
+  return { row, fallbackLevel };
+}
+
+// The response when no tier of the fallback finds a row.
+function buildInsufficientDataResponse(suburb, dwellingType, numberOfBeds) {
+  return {
+    status: 200,
+    body: {
+      sa2_code: suburb.sa2_code,
+      sa2_name: suburb.sa2_name,
+      dwelling_type: dwellingType,
+      number_of_beds: numberOfBeds,
+      insufficient_data: true,
+      message: `No rental data is available for ${suburb.sa2_name}, even as a broader estimate across all dwelling types and bedroom counts.`,
+    },
+  };
+}
+
+// Step 3: the full response for a found row: the primary figures, the
+// optional rent comparison, the warnings, and the dwelling-type breakdown.
+function buildRentalPriceCheckResponse(suburb, request, row, fallbackLevel) {
+  const { sa2Code, dwellingType, numberOfBeds, rent } = request;
 
   const comparison = rent !== null
     ? comparisonLabel(rent, row.lower_quartile_rent, row.upper_quartile_rent)
@@ -282,6 +296,27 @@ function computeRentalPriceCheck(query) {
       ...(anyStale && { stale_footnote: staleFootnote() }),
     },
   };
+}
+
+// Pure computation, decoupled from Express req/res, so both the real route
+// and the examples route below can share the exact same logic — the
+// examples route calls this directly (in-process) rather than making an
+// HTTP request back to the server.
+function computeRentalPriceCheck(query) {
+  const request = parseRentalPriceCheckQuery(query);
+  if (request.error) return request.error;
+  const { sa2Code, dwellingType, numberOfBeds } = request;
+
+  const suburb = findSuburbStmt.get(sa2Code);
+  if (!suburb) {
+    return { status: 404, body: { error: `Unknown sa2_code: ${sa2Code}` } };
+  }
+
+  const { row, fallbackLevel } = findRentWithFallback(sa2Code, dwellingType, numberOfBeds);
+  if (!row) {
+    return buildInsufficientDataResponse(suburb, dwellingType, numberOfBeds);
+  }
+  return buildRentalPriceCheckResponse(suburb, request, row, fallbackLevel);
 }
 
 router.get('/rental-price-check', (req, res) => {
