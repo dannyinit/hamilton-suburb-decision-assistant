@@ -41,7 +41,7 @@ entity "SUBURB_BUS_ACCESS" as suburb_bus_access {
 entity "SUBURB_DATA_STATUS" as suburb_data_status {
   * sa2_code : INTEGER <<PK, FK>>
   --
-  has_rent_data : BOOLEAN
+  has_rent_data : INTEGER (0/1)
   all_all_timeframe : TEXT
   all_all_quarters_stale : INTEGER
   data_status : TEXT

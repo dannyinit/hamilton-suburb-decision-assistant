@@ -27,10 +27,16 @@ Needs Node 22.12 or newer, but below 23 (`engines` in the root `package.json` is
   in another, `cd frontend && npm install && npm run dev`. Vite proxies `/api` to the
   backend on port 3001.
 - **Regression tests** (Suburb Finder, 89 checks; start the server first):
-  `python3 backend/tests/test_suburb_finder.py`.
+  `python3 backend/tests/test_suburb_finder.py` on Linux/macOS, or
+  `python backend/tests/test_suburb_finder.py` on Windows (where `python3` usually opens
+  the Microsoft Store instead of running Python). Two more suites,
+  `test_null_budget_rent.py` (6 checks) and `test_stale_budget_rent.py` (8 checks), start
+  their own server, so they need no server running but do need Node 22 on the `PATH`; see
+  [backend/README.md](backend/README.md#testing).
 
 The database, `data-pipeline/output/hamilton.db`, is **committed to the repo**, so none of
-the above needs Python or the raw data.
+the above needs the raw data, and only the regression tests need Python (Python 3 and its
+standard library; no `pip install`).
 
 ## Deployment (Render)
 
@@ -48,7 +54,10 @@ health-checked at `/api/health`, in the Singapore region (the closest to New Zea
 3. Open the build log and check which Node version was used, then open
    `https://<your-app>.onrender.com/api/health`.
 4. Smoke-test the live app with the regression suite:
-   `BASE_URL=https://<your-app>.onrender.com python3 backend/tests/test_suburb_finder.py`.
+   `BASE_URL=https://<your-app>.onrender.com python3 backend/tests/test_suburb_finder.py`
+   on Linux/macOS, or in Windows PowerShell
+   `$env:BASE_URL = "https://<your-app>.onrender.com"; python backend/tests/test_suburb_finder.py`
+   (the variable stays set for the rest of that PowerShell window).
 
 With `autoDeployTrigger: commit`, every push to `master` redeploys.
 
@@ -154,7 +163,7 @@ declared in the schema will silently not be checked.
 |---|---|---|
 | sa2_code | INTEGER FK→suburbs | |
 | dwelling_type | TEXT | ALL / Apartment / Boarding House / Flat / House / Room |
-| number_of_beds | TEXT, nullable | 'ALL', '0'..'9', '15', '5+', or NULL (a distinct MBIE category with real bond/rent data, not a duplicate of 'ALL') |
+| number_of_beds | TEXT, nullable | MBIE's categories, which the API accepts: 'ALL', '0'..'9', '15', '5+'. The Hamilton data contains only 'ALL', '1'..'5', '5+' and NULL (a distinct MBIE category with real bond/rent data, not a duplicate of 'ALL') |
 | timeframe | TEXT | ISO date (`YYYY-MM-DD`) of the most recent quarter that has a row for this exact combination (MBIE omits rows outright when a quarter's sample is too small) |
 | quarters_stale | INTEGER | this row's `timeframe` vs. the global latest quarter, in quarters (0 = current). Downstream code (the backend's stale footnote and staleness sentences) assumes that global latest quarter also appears as some row's `timeframe` in this table; that holds by construction, since each combination keeps its own latest quarter and the global latest is computed over the same Hamilton-filtered data |
 | median_rent, geometric_mean_rent, upper_quartile_rent, lower_quartile_rent | REAL | |
@@ -188,7 +197,7 @@ rent figure used for ranking/budget decisions.
 | column | type | notes |
 |---|---|---|
 | sa2_code | INTEGER PK FK→suburbs | |
-| has_rent_data | BOOLEAN | any row at all for this suburb, in any dwelling_type/number_of_beds |
+| has_rent_data | INTEGER (0/1) | any row at all for this suburb, in any dwelling_type/number_of_beds |
 | all_all_timeframe | TEXT, nullable | timeframe of the ALL/ALL row; NULL if it doesn't exist |
 | all_all_quarters_stale | INTEGER, nullable | |
 | data_status | TEXT | `CURRENT` / `STALE` (all_all_quarters_stale >= `STALE_THRESHOLD_QUARTERS`) / `NO_DATA` (no rent data at all, or no ALL/ALL row) |
@@ -260,7 +269,19 @@ many-to-many relationships in this schema, resolved two different ways:
 
 ## Setup
 
-1. Create a virtual environment: `python3 -m venv venv`
-2. Activate it: `source venv/bin/activate`
+Only needed to rebuild the database after changing the raw data or the pipeline; the app
+itself uses the committed `output/hamilton.db`. Requires Python 3.11 or newer (required by
+pandas 3.x); the pipeline was verified with Python 3.14. Run every step from
+`data-pipeline/`:
+
+1. Create a virtual environment: `python3 -m venv venv` on Linux/macOS, or
+   `python -m venv venv` on Windows
+2. Activate it: `source venv/bin/activate` on Linux/macOS, or `venv\Scripts\Activate.ps1`
+   in Windows PowerShell. If PowerShell refuses to run the script, first run
+   `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` (it lasts only for that
+   PowerShell window)
 3. Install dependencies: `pip install -r requirements.txt` (pandas, numpy, shapely, pyproj)
-4. Run the ingestion script to build `output/hamilton.db`
+4. Run the ingestion script to build `output/hamilton.db`:
+   `python scripts/build_hamilton_db.py` (inside the activated venv, `python` works on every
+   platform). It overwrites `output/hamilton.db`; recommit that file afterwards (see
+   Deployment)
