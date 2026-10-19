@@ -215,43 +215,53 @@ function parseWeight(raw, paramName) {
   return value;
 }
 
-// Pure computation, decoupled from Express req/res, so both the real route
-// and the examples route below can share the exact same logic — the
-// examples route calls this directly (in-process) rather than making an
-// HTTP request back to the server.
-function computeSuburbFinder(query) {
-  const {
-    budget: budgetRaw,
-    destination: destinationName,
-    rent_weight: rentWeightRaw,
-    transport_weight: transportWeightRaw,
-    distance_weight: distanceWeightRaw,
-  } = query;
+// A validation failure, in the { status, body } shape computeSuburbFinder
+// returns. The parse helpers below wrap it as { error } so the caller can
+// stop at the first invalid parameter and return it unchanged.
+function badRequest(message) {
+  return { error: { status: 400, body: { error: message } } };
+}
 
+// budget is required and must be a non-negative number. Returns { budget }
+// or { error }.
+function parseBudget(budgetRaw) {
   if (!budgetRaw) {
-    return { status: 400, body: { error: 'budget is required' } };
+    return badRequest('budget is required');
   }
 
   const budget = Number(budgetRaw);
   if (!Number.isFinite(budget) || budget < 0) {
-    return { status: 400, body: { error: 'budget must be a non-negative number' } };
+    return badRequest('budget must be a non-negative number');
   }
+  return { budget };
+}
 
+// Returns { destination } (a destinations row, or null when omitted) or
+// { error }.
+function resolveDestination(destinationName) {
   // destination is optional: omitted entirely (key absent) means "don't
   // score distance at all" and destination stays null. Present-but-empty
   // or present-but-invalid both still fail validation below, same as a
   // typo — an empty value isn't meaningfully different from a wrong one.
-  let destination = null;
-  if (destinationName !== undefined) {
-    destination = destinationByName.get(destinationName);
-    if (!destination) {
-      return {
-        status: 400,
-        body: { error: `destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}` },
-      };
-    }
+  if (destinationName === undefined) {
+    return { destination: null };
   }
-  const hasDestination = destination !== null;
+
+  const destination = destinationByName.get(destinationName);
+  if (!destination) {
+    return badRequest(`destination must be one of: ${destinationsById.map((d) => d.name).join(', ')}`);
+  }
+  return { destination };
+}
+
+// Parses the weights in play and normalises them to sum to 1. Returns
+// { weightsUsed } or { error }.
+function resolveWeights(query, hasDestination) {
+  const {
+    rent_weight: rentWeightRaw,
+    transport_weight: transportWeightRaw,
+    distance_weight: distanceWeightRaw,
+  } = query;
 
   // Each weight defaults independently to 1 (an unset slider), then
   // whichever weights are in play are normalised together below — so
@@ -265,7 +275,7 @@ function computeSuburbFinder(query) {
     rentWeight = parseWeight(rentWeightRaw, 'rent_weight');
     transportWeight = parseWeight(transportWeightRaw, 'transport_weight');
   } catch (err) {
-    return { status: 400, body: { error: err.message } };
+    return badRequest(err.message);
   }
 
   let distanceWeight = 0;
@@ -273,7 +283,7 @@ function computeSuburbFinder(query) {
     try {
       distanceWeight = parseWeight(distanceWeightRaw, 'distance_weight');
     } catch (err) {
-      return { status: 400, body: { error: err.message } };
+      return badRequest(err.message);
     }
   } else if (distanceWeightRaw !== undefined) {
     // Silently ignored per design decision — logged so it's visible during
@@ -286,7 +296,7 @@ function computeSuburbFinder(query) {
     const applicableWeightNames = hasDestination
       ? 'rent_weight, transport_weight, and distance_weight'
       : 'rent_weight and transport_weight';
-    return { status: 400, body: { error: `${applicableWeightNames} cannot all be zero` } };
+    return badRequest(`${applicableWeightNames} cannot all be zero`);
   }
 
   const weightsUsed = hasDestination
@@ -299,18 +309,64 @@ function computeSuburbFinder(query) {
       rent: rentWeight / weightSum,
       transport: transportWeight / weightSum,
     };
+  return { weightsUsed };
+}
 
-  const candidates = hasDestination
+// Step 1: validate the query in a fixed order — budget, then destination,
+// then weights — so a request with several invalid parameters always
+// reports the same one. Returns { error } or
+// { budget, destination, weightsUsed }.
+function parseSuburbFinderQuery(query) {
+  const budgetResult = parseBudget(query.budget);
+  if (budgetResult.error) return budgetResult;
+
+  const destinationResult = resolveDestination(query.destination);
+  if (destinationResult.error) return destinationResult;
+  const { destination } = destinationResult;
+
+  const weightsResult = resolveWeights(query, destination !== null);
+  if (weightsResult.error) return weightsResult;
+
+  return { budget: budgetResult.budget, destination, weightsUsed: weightsResult.weightsUsed };
+}
+
+// Step 2: one row per suburb (see findCandidatesStmt above), with the
+// distance join only when a destination was chosen.
+function findCandidates(destination) {
+  return destination !== null
     ? findCandidatesStmt.all(destination.destination_id)
     : findCandidatesNoDestinationStmt.all();
+}
 
-  // Hard constraints, in order: data quality first, then budget — so a
-  // suburb never carries both an insufficient_data and an exceeds_budget
-  // reason at once (per data-pipeline/README.md's documented ordering).
-  // Unaffected by destination — neither check reads distance_m. The budget
-  // check compares against `lowest_rent` (the cheapest recent specific
-  // dwelling type/beds row for that suburb), not the ALL/ALL median — see
-  // the `cheapest` CTE above for why.
+// The lowest_rent object for a candidate row: the figure the budget is
+// checked against, plus where it came from.
+function buildLowestRent(row) {
+  const { isLowSample, note } = lowSampleWarning(row.lowest_rent_total_bonds);
+  return {
+    value: row.lowest_rent,
+    dwelling_type: row.lowest_dwelling_type,
+    number_of_beds: row.lowest_number_of_beds,
+    total_bonds: row.lowest_rent_total_bonds,
+    // The quarter of the row `value` came from, formatted the same way as
+    // Rental Price Check's timeframe_label. Rows within one suburb differ
+    // in age, so this is per figure, not one date for the whole response.
+    timeframe: row.lowest_rent_timeframe,
+    timeframe_label: quarterLabel(row.lowest_rent_timeframe),
+    low_sample_warning: isLowSample,
+    low_sample_note: note,
+  };
+}
+
+// Step 3: split candidates into { included, excluded }.
+//
+// Hard constraints, in order: data quality first, then budget — so a
+// suburb never carries both an insufficient_data and an exceeds_budget
+// reason at once (per data-pipeline/README.md's documented ordering).
+// Unaffected by destination — neither check reads distance_m. The budget
+// check compares against `lowest_rent` (the cheapest recent specific
+// dwelling type/beds row for that suburb), not the ALL/ALL median — see
+// the `cheapest` CTE above for why.
+function applyHardConstraints(candidates, budget, hasDestination) {
   const excluded = [];
   const included = [];
 
@@ -343,20 +399,7 @@ function computeSuburbFinder(query) {
       continue;
     }
 
-    const { isLowSample, note } = lowSampleWarning(row.lowest_rent_total_bonds);
-    const lowestRent = {
-      value: row.lowest_rent,
-      dwelling_type: row.lowest_dwelling_type,
-      number_of_beds: row.lowest_number_of_beds,
-      total_bonds: row.lowest_rent_total_bonds,
-      // The quarter of the row `value` came from, formatted the same way as
-      // Rental Price Check's timeframe_label. Rows within one suburb differ
-      // in age, so this is per figure, not one date for the whole response.
-      timeframe: row.lowest_rent_timeframe,
-      timeframe_label: quarterLabel(row.lowest_rent_timeframe),
-      low_sample_warning: isLowSample,
-      low_sample_note: note,
-    };
+    const lowestRent = buildLowestRent(row);
 
     if (row.lowest_rent > budget) {
       excluded.push({
@@ -379,40 +422,57 @@ function computeSuburbFinder(query) {
     });
   }
 
-  const distanceExcludedFields = hasDestination ? {} : {
+  return { included, excluded };
+}
+
+// The fields every 200 response starts with, in this order: budget,
+// destination, the distance_excluded pair (only without a destination),
+// then weights_used. Built once so both response shapes share it.
+function buildResponseHeader(budget, destination, weightsUsed) {
+  const distanceExcludedFields = destination !== null ? {} : {
     distance_excluded: true,
     distance_excluded_note: 'No destination was provided, so distance could not be scored. rent_weight and transport_weight were re-normalised to fill the remaining weight.',
   };
 
-  // Nothing to normalise against with zero survivors — short-circuit
-  // before any of the per-criterion min/max logic below.
-  if (included.length === 0) {
-    // Same null guard as the budget check: a null lowest_rent must never
-    // win the `<` comparison below (null < 192 is true in JS).
-    const cheapestCurrent = candidates
-      .filter((row) => row.data_status === 'CURRENT' && row.lowest_rent !== null)
-      .reduce((min, row) => (min === null || row.lowest_rent < min ? row.lowest_rent : min), null);
+  return {
+    budget,
+    destination: destination !== null ? destination.name : null,
+    ...distanceExcludedFields,
+    weights_used: weightsUsed,
+  };
+}
 
-    return {
-      status: 200,
-      body: {
-        budget,
-        destination: hasDestination ? destination.name : null,
-        ...distanceExcludedFields,
-        weights_used: weightsUsed,
-        results: [],
-        excluded,
-        no_suburbs_in_budget: true,
-        message: cheapestCurrent === null
-          ? 'No suburbs have current rent data to compare against.'
-          : `No suburbs with current rent data fall within a $${budget}/week budget. The cheapest available suburb (with current data) is $${cheapestCurrent}/week.`,
-      },
-    };
-  }
+// The response when no suburb survives the hard constraints: an empty
+// results list plus a hint naming the cheapest figure available.
+function buildNoResultsResponse(candidates, excluded, header) {
+  // Same null guard as the budget check: a null lowest_rent must never
+  // win the `<` comparison below (null < 192 is true in JS).
+  const cheapestCurrent = candidates
+    .filter((row) => row.data_status === 'CURRENT' && row.lowest_rent !== null)
+    .reduce((min, row) => (min === null || row.lowest_rent < min ? row.lowest_rent : min), null);
 
-  // Per-criterion normalisation, applied only across `included` (post
-  // budget-filter), per the design decision that ranking should reflect
-  // relative comparison among viable options, not all 62 suburbs.
+  return {
+    status: 200,
+    body: {
+      ...header,
+      results: [],
+      excluded,
+      no_suburbs_in_budget: true,
+      message: cheapestCurrent === null
+        ? 'No suburbs have current rent data to compare against.'
+        : `No suburbs with current rent data fall within a $${header.budget}/week budget. The cheapest available suburb (with current data) is $${cheapestCurrent}/week.`,
+    },
+  };
+}
+
+// Step 4: score each criterion. Returns one score array per criterion,
+// index-aligned with `included` (distanceScores is null without a
+// destination).
+//
+// Per-criterion normalisation, applied only across `included` (post
+// budget-filter), per the design decision that ranking should reflect
+// relative comparison among viable options, not all 62 suburbs.
+function scoreCriteria(included, destination) {
   const rentScores = normaliseCriterion(included, {
     // Rounded for scoring only — the raw median_rent is still what's shown
     // in score_breakdown below. This is the ALL/ALL median (the scoring
@@ -437,7 +497,7 @@ function computeSuburbFinder(query) {
     threshold: TRANSPORT_THRESHOLD,
     reverse: false, // benefit: more routes reachable is better
   });
-  const distanceScores = hasDestination
+  const distanceScores = destination !== null
     ? normaliseCriterion(included, {
       // Rounded for scoring only — the raw distance_m is still what's
       // shown in score_breakdown below.
@@ -447,12 +507,20 @@ function computeSuburbFinder(query) {
     })
     : null;
 
-  // Weighted Sum Model: overall_score is the weights-normalised dot product
-  // of the per-criterion scores in play. score_breakdown carries each
-  // criterion's raw value alongside its normalised score, so the frontend
-  // can show "why" a suburb scored the way it did, not just the final
-  // number — distance is omitted from score_breakdown entirely (not just
-  // left null) when there's no destination, per distance_excluded above.
+  return { rentScores, transportScores, distanceScores };
+}
+
+// Step 5: combine the criterion scores into overall_score and rank.
+//
+// Weighted Sum Model: overall_score is the weights-normalised dot product
+// of the per-criterion scores in play. score_breakdown carries each
+// criterion's raw value alongside its normalised score, so the frontend
+// can show "why" a suburb scored the way it did, not just the final
+// number — distance is omitted from score_breakdown entirely (not just
+// left null) when there's no destination, per distance_excluded above.
+function rankSuburbs(included, scores, weightsUsed, hasDestination) {
+  const { rentScores, transportScores, distanceScores } = scores;
+
   const scored = included.map((suburb, i) => {
     const rentScore = rentScores[i];
     const transportScore = transportScores[i];
@@ -485,19 +553,32 @@ function computeSuburbFinder(query) {
   // Highest overall_score first; ties broken by sa2_code so ordering is
   // deterministic across requests rather than relying on sort stability.
   scored.sort((a, b) => b.overall_score - a.overall_score || a.sa2_code - b.sa2_code);
-  const results = scored.map((suburb, i) => ({ rank: i + 1, ...suburb }));
+  return scored.map((suburb, i) => ({ rank: i + 1, ...suburb }));
+}
 
-  return {
-    status: 200,
-    body: {
-      budget,
-      destination: hasDestination ? destination.name : null,
-      ...distanceExcludedFields,
-      weights_used: weightsUsed,
-      results,
-      excluded,
-    },
-  };
+// Pure computation, decoupled from Express req/res, so both the real route
+// and the examples route below can share the exact same logic — the
+// examples route calls this directly (in-process) rather than making an
+// HTTP request back to the server.
+function computeSuburbFinder(query) {
+  const parsed = parseSuburbFinderQuery(query);
+  if (parsed.error) return parsed.error;
+  const { budget, destination, weightsUsed } = parsed;
+  const hasDestination = destination !== null;
+
+  const candidates = findCandidates(destination);
+  const { included, excluded } = applyHardConstraints(candidates, budget, hasDestination);
+  const header = buildResponseHeader(budget, destination, weightsUsed);
+
+  // Nothing to normalise against with zero survivors — short-circuit
+  // before any of the per-criterion min/max logic below.
+  if (included.length === 0) {
+    return buildNoResultsResponse(candidates, excluded, header);
+  }
+
+  const scores = scoreCriteria(included, destination);
+  const results = rankSuburbs(included, scores, weightsUsed, hasDestination);
+  return { status: 200, body: { ...header, results, excluded } };
 }
 
 router.get('/suburb-finder', (req, res) => {
