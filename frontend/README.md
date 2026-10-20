@@ -25,8 +25,9 @@ React frontend for the Hamilton Suburb Decision Assistant, built with
 - **Rental Price Check** (`/rental-price-check`): pick a suburb, dwelling type and
   number of bedrooms, optionally enter a weekly rent, and see the median and typical
   range, a Below market / Fair / Above market label, and a rent breakdown by dwelling
-  type and bedrooms. Each suburb in Suburb Finder links here with the suburb and
-  dwelling type pre-filled.
+  type and bedrooms. Warnings flag old data and small samples, and a note explains
+  that the data does not record furnishing or ensuites. Each suburb in Suburb Finder
+  links here with the suburb and dwelling type pre-filled.
 - **About** (`/about`): what the app does, how to use it, and its data sources.
 - A **Data sources** footer on every page credits each dataset, as its licence requires.
 

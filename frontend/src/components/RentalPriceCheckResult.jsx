@@ -320,9 +320,9 @@ function RentalPriceCheckResult({ status, data, errorMessage }) {
         </p>
       )}
 
-      {/* A known limit of the source data, promised in the proposal to be
-          shown to users. Always shown, since it affects the typical range
-          as well as the comparison label. */}
+      {/* A known limit of the source data that users need when comparing a
+          rent. Always shown, since it affects the typical range as well as
+          the comparison label. */}
       <div className="banner banner-info">
         MBIE bond data does not record whether a place is furnished or has an
         ensuite, so compare like with like.
