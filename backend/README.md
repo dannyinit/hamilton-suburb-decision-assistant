@@ -432,19 +432,19 @@ with no destination, the `400` error message names only those two params, not
 
 **Transport: walk-based route reach, not a stop count.** Each suburb's transport
 figure is computed in the data pipeline by sampling its Stats NZ polygon on a 50m
-grid and, at every point, counting the distinct bus routes with a stop within a 400m
-walk (straight-line; stops are counted city-wide, whichever suburb they sit in).
+grid and, at every point, counting the distinct bus routes with a stop within a 400 m
+straight-line radius (stops are counted city-wide, whichever suburb they sit in).
 `score_breakdown.transport` then carries:
 
 | field | notes |
 |---|---|
-| `value` | the plain mean number of distinct routes within a 400m walk, across the suburb's points — **uncapped, shown to users** (the busiest suburbs are ~9.5). Points with no stop in range count as 0, so unserved land lowers it. The score is derived from this alone: `normalised_score` can be reproduced as the min-max normalisation of √`value`, rounded to 0.02 |
+| `value` | the plain mean number of distinct routes within a 400 m straight-line radius, across the suburb's points — **uncapped, shown to users** (the busiest suburbs are ~9.5). Points with no stop in range count as 0, so unserved land lowers it. The score is derived from this alone: `normalised_score` can be reproduced as the min-max normalisation of √`value`, rounded to 0.02 |
 | `walk_coverage` | share of the suburb (0–1) within 400m of any bus stop. Returned for API consumers, not shown in the UI or scored separately — it's already reflected in `value` (uncovered points count 0), and the UI deliberately shows only one transport signal. Always `≤ value`: a covered point has at least one route |
 | `normalised_score` | as for the other criteria |
 
 **The square root is a judgment call, not a finding.** No ridership data or planning
 standard was found supporting any particular shape for how much extra routes are worth
-(the 400m radius, by contrast, does match NZTA/Waka Kotahi's ~5-minute-walk guidance).
+(the 400 m radius, by contrast, has a simple rationale: it was chosen as an estimate of a five-minute walk).
 The score is `√value`, applied to the suburb's *average*, because it compresses the
 scale so the CBD's ~9.5 routes doesn't flatten every other suburb into the bottom of it
 (uncapped, the median suburb sits 20% of the way up the range; with √, 41%) while being
@@ -491,7 +491,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
 
 - Each criterion is min-max normalised to `[0,1]`. Rent and distance are cost
   criteria (reversed: lower is better); transport (√ of the average routes within a
-  400m walk, see "Transport" below) is a benefit criterion (higher is better).
+  400 m straight-line radius, see "Transport" below) is a benefit criterion (higher is better).
 - **Exact tie** (every surviving suburb has the identical value on a criterion):
   `0.5` for all — deliberately neutral, not "best" or "worst".
 - **Otherwise**, normalisation divides by `max(actual range, threshold)` — a
@@ -504,7 +504,7 @@ The rent criterion here is always the suburb-wide `median_rent`, never
   | criterion | threshold |
   |---|---|
   | rent | $50 |
-  | transport (√ of average routes within a 400m walk) | 0.3 |
+  | transport (√ of average routes within a 400 m straight-line radius) | 0.3 |
   | distance — University of Waikato | 1000m |
   | distance — Transport Centre | 750m |
   | distance — The Base | 940m |

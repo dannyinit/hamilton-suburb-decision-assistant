@@ -36,13 +36,13 @@ function formatDistance(metres) {
 }
 
 // transport.value is the plain average number of distinct bus routes within a
-// 400m walk of a point in the suburb, uncapped — shown as-is, so a busy central
-// suburb honestly reads ~9.5. The score is the square root of this same figure
-// (a judgment call that compresses the scale so the CBD doesn't flatten
-// everyone else, while staying strictly increasing: a higher number never
-// scores lower; see backend/README.md), so what's shown and what's scored
-// always agree on order. The 400m is a straight-line radius, not a walking
-// route, so it's shown as "within 400 m" rather than as a walking time.
+// 400 m straight-line radius of a point in the suburb, uncapped — shown as-is,
+// so a busy central suburb honestly reads ~9.5. The score is the square root of
+// this same figure (a judgment call that compresses the scale so the CBD
+// doesn't flatten everyone else, while staying strictly increasing: a higher
+// number never scores lower; see backend/README.md), so what's shown and what's
+// scored always agree on order. The 400m is a straight-line radius, not a
+// walking route, so it's shown as "within 400 m" rather than as a walking time.
 // walk_coverage (also in the response) is
 // deliberately not shown: it's already folded into value (points with no
 // stop in range count 0), and showing it would offer users a second, unscored

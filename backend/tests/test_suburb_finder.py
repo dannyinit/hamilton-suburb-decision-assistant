@@ -164,11 +164,11 @@ check("distance nearest-suburb differs meaningfully across destinations", len(se
 
 # --- 8. Low-coverage suburbs included without crashing ---
 # Rotokauri-Waiwhakareke, Ruakura and Peacockes are large, still-developing
-# suburbs with little of their land within a 400m walk of a stop. (Formerly
-# "zero-bus-stop suburbs" under the centroid-count measure, which scored all
-# three exactly 0; walk-based route reach gives Ruakura and Rotokauri a small
-# but non-zero score since parts of them are served: Rotokauri ~0.07,
-# Ruakura ~0.21, Peacockes 0.)
+# suburbs with little of their land within a 400 m straight-line radius of a
+# stop. (Formerly "zero-bus-stop suburbs" under the centroid-count measure,
+# which scored all three exactly 0; walk-based route reach gives Ruakura and
+# Rotokauri a small but non-zero score since parts of them are served:
+# Rotokauri ~0.07, Ruakura ~0.21, Peacockes 0.)
 code, body = call({"budget": 1000, "destination": "The Base"})
 r = body["results"]
 low_coverage_names = {"Rotokauri-Waiwhakareke", "Ruakura", "Peacockes"}
