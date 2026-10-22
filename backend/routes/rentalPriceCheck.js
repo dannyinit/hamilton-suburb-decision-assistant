@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { lowSampleWarning, LOW_SAMPLE_FOOTNOTE } = require('../lowSampleWarning');
 const { quarterLabel, quarterMonths, addQuarters } = require('../quarterLabel');
+const { parseNumericParam } = require('../numericParam');
 
 const router = express.Router();
 
@@ -182,7 +183,7 @@ function parseRentalPriceCheckQuery(query) {
     return badRequest('sa2_code and dwelling_type are required');
   }
 
-  const sa2Code = Number(sa2CodeRaw);
+  const sa2Code = parseNumericParam(sa2CodeRaw);
   if (!Number.isInteger(sa2Code)) {
     return badRequest('sa2_code must be an integer');
   }
@@ -201,9 +202,12 @@ function parseRentalPriceCheckQuery(query) {
     return badRequest(`number_of_beds must be one of: ${VALID_NUMBER_OF_BEDS.join(', ')}`);
   }
 
+  // Omitted or empty means "no quoted rent" (figures only, no label), the
+  // same as an empty number_of_beds above. Number('') would be 0 and label
+  // a $0 rent instead.
   let rent = null;
-  if (rentRaw !== undefined) {
-    rent = Number(rentRaw);
+  if (rentRaw !== undefined && rentRaw !== '') {
+    rent = parseNumericParam(rentRaw);
     if (!Number.isFinite(rent) || rent < 0) {
       return badRequest('rent must be a non-negative number');
     }

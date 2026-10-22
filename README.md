@@ -26,10 +26,11 @@ Needs Node 22.12 or newer, but below 23 (`engines` in the root `package.json` is
 - **Development (hot reload):** in one terminal, `cd backend && npm install && npm start`;
   in another, `cd frontend && npm install && npm run dev`. Vite proxies `/api` to the
   backend on port 3001.
-- **Regression tests** (Suburb Finder, 89 checks; start the server first):
-  `python3 backend/tests/test_suburb_finder.py` on Linux/macOS, or
-  `python backend/tests/test_suburb_finder.py` on Windows (where `python3` usually opens
-  the Microsoft Store instead of running Python). Two more suites,
+- **Regression tests** (Suburb Finder, 94 checks; Rental Price Check, 33 checks; start
+  the server first): `python3 backend/tests/test_suburb_finder.py` and
+  `python3 backend/tests/test_rental_price_check.py` on Linux/macOS, or `python …` on
+  Windows (where `python3` usually opens the Microsoft Store instead of running Python).
+  Two more suites,
   `test_null_budget_rent.py` (6 checks) and `test_stale_budget_rent.py` (8 checks), start
   their own server, so they need no server running but do need Node 22 on the `PATH`; see
   [backend/README.md](backend/README.md#testing).

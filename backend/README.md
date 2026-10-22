@@ -22,6 +22,7 @@ backend/
 ├── db.js                        # shared read-only db connection
 ├── lowSampleWarning.js          # shared "small sample" signal + wording (Rental Price Check and Suburb Finder)
 ├── quarterLabel.js              # MBIE TimeFrame date -> "Q1 2026" / "Jan–Mar" labels
+├── numericParam.js              # strict number parsing for query parameters
 ├── routes/
 │   ├── index.js                 # collects every feature's router
 │   ├── rentalPriceCheck.js      # GET /api/rental-price-check
@@ -29,6 +30,7 @@ backend/
 │   └── suburbs.js               # GET /api/suburbs
 ├── tests/
 │   ├── test_suburb_finder.py    # regression script, run against a live server
+│   ├── test_rental_price_check.py # regression script, run against a live server; expected values read from the db
 │   ├── test_null_budget_rent.py # null guard on the budget figure; starts its own server on a modified db copy
 │   └── test_stale_budget_rent.py # recent-rows rule on the budget figure; starts its own server on a modified db copy
 └── test-examples.md             # ready-to-paste curl examples for manual testing
@@ -54,6 +56,11 @@ on startup (`fileMustExist: true`) if it's missing, rather than silently creatin
 empty database.
 
 ## Endpoints
+
+Numeric query parameters (`sa2_code`, `rent`, `budget` and the weights) must be
+plain decimal numbers, optionally with an exponent. Whitespace, hexadecimal such as
+`0x1F` and other forms JavaScript's `Number()` would quietly accept are rejected with
+`400`, using the same message as any other invalid number.
 
 ### `GET /api`
 
@@ -115,7 +122,7 @@ other dwelling type the suburb has data for.
 | `sa2_code` | yes | integer SA2 code (see `suburbs` table) |
 | `dwelling_type` | yes | one of `ALL`, `Apartment`, `Boarding House`, `Flat`, `House`, `Room` |
 | `number_of_beds` | no | one of `ALL`, `0`–`9`, `15`, `5+`. Omitted/empty means "any bed count" and resolves to `ALL` — this endpoint does not expose the rent table's separate, undocumented NULL-beds data category |
-| `rent` | no | a weekly rent figure to compare against the market; if given, the response includes a comparison label |
+| `rent` | no | a weekly rent figure to compare against the market; if given, the response includes a comparison label. Omitted or empty means no comparison |
 
 **Fallback order:** exact match (`sa2_code` + `dwelling_type` + `number_of_beds`) →
 same dwelling type with `number_of_beds='ALL'` (`fallback_level: "dwelling_type"`,
@@ -720,14 +727,20 @@ fully score-broken-down, which is too long to skim in a demo. No parameters.
 - **`/api/rental-price-check-bed-availability`:** manual — see
   [test-examples.md](test-examples.md). Same reasoning as `/api/suburbs`: no
   parameters, one cached lookup, nothing to regress.
-- **Rental Price Check:** manual — see [test-examples.md](test-examples.md) for
-  curl examples covering every case (exact match, both fallback tiers, a stale row,
-  empty breakdown, stale breakdown rows under a current primary result,
-  low-sample footnote, invalid input, rent comparison; NO_DATA is described but has
-  no real-data example as of the Q2 2026 pull).
+- **Rental Price Check:** automated regression script,
+  [tests/test_rental_price_check.py](tests/test_rental_price_check.py) — 33 checks run
+  against a live server (validation, including whitespace and hex values; exact match;
+  the four label boundaries at and either side of the quartiles; empty rent meaning no
+  comparison; omitted bedrooms meaning `ALL`; both fallback tiers; the staleness and
+  small-sample warnings; the breakdown's dwelling types). The expected values are read
+  from `hamilton.db` with SQL in the script, not copied from earlier API output. Start
+  the server first, then `python3 backend/tests/test_rental_price_check.py` (`BASE_URL`
+  works as below). [test-examples.md](test-examples.md) still has curl examples for
+  every case, for manual checks (NO_DATA is described but has no real-data example as of
+  the Q2 2026 pull).
 - **Suburb Finder:** automated regression script,
-  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 89 checks run
-  against a live server (validation, optional destination, empty result set,
+  [tests/test_suburb_finder.py](tests/test_suburb_finder.py) — 94 checks run
+  against a live server (validation, including whitespace and hex values, optional destination, empty result set,
   exact-tie, normal ranking, full population, all 4 destinations,
   low-coverage suburbs, transport route reach (including monotonicity and the Hamilton Lake lake mask), determinism, zero-weight criteria, `lowest_rent`
   — structure, its quarter label, the `low_sample_warning`/`total_bonds <= 6` invariant, the

@@ -64,6 +64,23 @@ check("non-numeric weight -> 400", code == 400, body)
 code, body = call({"budget": 500, "destination": "The Base", "rent_weight": 0, "transport_weight": 0, "distance_weight": 0})
 check("all weights zero (with destination) -> 400", code == 400, body)
 
+# Forms JavaScript's Number() would quietly accept: whitespace reads as 0 and
+# hex as a number. Found by a hostile-input probe; they must be rejected too.
+code, body = call({"budget": "   ", "destination": "The Base"})
+check("whitespace budget -> 400 (not read as 0)", code == 400, body)
+
+code, body = call({"budget": "0x1F", "destination": "The Base"})
+check("hex budget -> 400 (not read as 31)", code == 400, body)
+
+code, body = call({"budget": 500, "destination": "The Base", "rent_weight": " "})
+check("whitespace weight -> 400 (not read as 0)", code == 400, body)
+
+code, body = call({"budget": 500, "destination": "The Base", "transport_weight": "0x1F"})
+check("hex weight -> 400", code == 400, body)
+
+code, body = call({"budget": "191.99", "destination": "The Base"})
+check("decimal budget still accepted", code == 200, body)
+
 # --- 2. Optional destination ---
 code, body = call({"budget": 500})
 check("no destination -> 200, not a validation error", code == 200, body)

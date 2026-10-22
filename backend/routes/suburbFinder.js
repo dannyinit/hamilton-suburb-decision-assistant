@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { lowSampleWarning } = require('../lowSampleWarning');
 const { quarterLabel } = require('../quarterLabel');
+const { parseNumericParam } = require('../numericParam');
 
 const router = express.Router();
 
@@ -199,7 +200,7 @@ function parseWeight(raw, paramName) {
   // criterion at all" and must stay 0, not be defaulted away — Number('')
   // alone would evaluate to 0 and silently conflate the two.
   if (raw === undefined || raw === '') return 1;
-  const value = Number(raw);
+  const value = parseNumericParam(raw);
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`${paramName} must be a non-negative number`);
   }
@@ -220,7 +221,7 @@ function parseBudget(budgetRaw) {
     return badRequest('budget is required');
   }
 
-  const budget = Number(budgetRaw);
+  const budget = parseNumericParam(budgetRaw);
   if (!Number.isFinite(budget) || budget < 0) {
     return badRequest('budget must be a non-negative number');
   }
