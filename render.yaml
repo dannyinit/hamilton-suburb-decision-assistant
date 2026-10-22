@@ -20,7 +20,7 @@ services:
     healthCheckPath: /api/health
     autoDeployTrigger: commit
     envVars:
-      # Exact version, tested locally (build + all 89 regression checks). An
+      # Exact version, tested locally (build + all regression suites). An
       # unbounded range would resolve to the newest Node major over time, and
       # Vite 8 needs >= 22.12. Bump deliberately, then re-run the checks.
       - key: NODE_VERSION
