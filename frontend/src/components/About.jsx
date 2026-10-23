@@ -1,8 +1,9 @@
 // Static overview of the app: what it's for, how to use each feature, how
 // results are calculated, and which datasets it draws on. The calculation
 // section reuses the Suburb Finder legend's wording (SuburbFinderResults.jsx)
-// so the two stay consistent; keep them in step when either changes. Deliberately no API calls — nothing here
-// depends on the current data pull. Full attribution and licences stay in
+// so the two stay consistent; keep them in step when either changes.
+// Deliberately no API calls: nothing here depends on the current data
+// pull. Full attribution and licences stay in
 // the DataSources footer (rendered by the App layout on every page, this one
 // included), so the "Data used" list below is a plain-language summary, not
 // a second copy of the licence text to keep in sync.

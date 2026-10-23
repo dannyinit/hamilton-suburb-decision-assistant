@@ -410,6 +410,11 @@ def build_database(
     destination_distances: pd.DataFrame,
     db_path: Path,
 ) -> None:
+    """
+    Write every table to a fresh SQLite database at db_path, replacing any existing file.
+    The schema comes from SCHEMA_DDL, with foreign keys enforced during the inserts, and
+    each DataFrame is appended to its matching table.
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     if db_path.exists():
         db_path.unlink()
@@ -435,6 +440,10 @@ def build_database(
 
 
 def main() -> None:
+    """
+    Run the whole pipeline: load the raw datasets from RAW_DIR, compute bus access, data
+    status and destination distances, write everything to DB_PATH and print the row counts.
+    """
     hamilton_sa2, polygons = load_hamilton_sa2(RAW_DIR / "sa2_higher_geographies.csv")
     assert len(hamilton_sa2) == 62, f"Expected 62 Hamilton SA2s, got {len(hamilton_sa2)}"
 

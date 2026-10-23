@@ -1,5 +1,8 @@
 import { DESTINATIONS } from '../suburbFinderOptions';
 
+// The Suburb Finder inputs: budget, optional destination, the Live ranking
+// checkbox and the three priority sliders. It holds no state of its own;
+// SuburbFinder owns the values and decides when a search runs.
 function SuburbFinderForm({ values, onChange, onSubmit, submitting, liveRanking, onLiveRankingChange }) {
   function handleFieldChange(field) {
     return (e) => onChange({ ...values, [field]: e.target.value });

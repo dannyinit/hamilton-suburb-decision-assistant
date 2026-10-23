@@ -9,8 +9,8 @@ const router = express.Router();
 const VALID_DWELLING_TYPES = ['ALL', 'Apartment', 'Boarding House', 'Flat', 'House', 'Room'];
 
 // The rent table also has a separate, not-yet-fully-documented NULL
-// category for number_of_beds (distinct from 'ALL') — see
-// data-pipeline/README.md, rent table notes. This endpoint doesn't
+// category for number_of_beds (distinct from 'ALL'). See the `rent`
+// table in the root README.md, "Output schema". This endpoint doesn't
 // expose it: an omitted number_of_beds means "any bed count" (a
 // user-intent question), which maps to the standard MBIE ALL aggregate,
 // not that undocumented data category (a data question). The two only
@@ -19,7 +19,7 @@ const VALID_NUMBER_OF_BEDS = ['ALL', '0', '1', '2', '3', '4', '5', '6', '7', '8'
 
 // Feature 2 (lookup/transparency) discloses any staleness at all, unlike
 // Feature 1's ranking engine which only excludes a suburb at >= 4 quarters
-// stale (see data-pipeline/README.md, "Consumption rules for downstream
+// stale (see the root README.md, "Consumption rules for downstream
 // features").
 const STALE_THRESHOLD_QUARTERS = 1;
 

@@ -353,7 +353,8 @@ function buildLowestRent(row) {
 //
 // Hard constraints, in order: data quality first, then budget — so a
 // suburb never carries both an insufficient_data and an exceeds_budget
-// reason at once (per data-pipeline/README.md's documented ordering).
+// reason at once (per the ordering documented in the root README.md,
+// "Consumption rules for downstream features").
 // Unaffected by destination — neither check reads distance_m. The budget
 // check compares against `lowest_rent` (the cheapest recent specific
 // dwelling type/beds row for that suburb), not the ALL/ALL median — see

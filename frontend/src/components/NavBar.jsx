@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom';
 
+// The tab bar under the app title, linking the three pages. NavLink marks
+// the current page's tab as active so it can be styled differently.
 function NavBar() {
   return (
     <nav className="nav-bar">
